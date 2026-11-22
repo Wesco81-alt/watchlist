@@ -1,4 +1,4 @@
-const APP_VERSION = "v1.5.0 (2026-11-22)";
+const APP_VERSION = "lokaler Stand (dev)";
 const STORAGE_KEY = "watchlist_kurator_items_v4";
 const SEEN_TITLES_STORAGE = "watchlist_kurator_seen_titles_v2";
 const SEEN_TITLES_LEGACY_STORAGE = "watchlist_kurator_seen_titles_v1";
@@ -624,4 +624,4 @@ syncProviderSelects();
 renderProviderToggles();
 renderList();
 renderSeenList();
-debugLog("Watchlist-Kurator " + APP_VERSION + " initialisiert.");
+debugLog("Watchlist-Kurator (" + APP_VERSION + ") initialisiert.");
