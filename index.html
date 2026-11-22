@@ -85,6 +85,7 @@
     }
     @media (min-width: 640px) {
       .row.two { grid-template-columns: 1fr 1fr; }
+      .row.ai-top { grid-template-columns: 1.4fr 1fr auto; }
       .row.add { grid-template-columns: 2fr 1fr 1fr auto; }
       .row.filters { grid-template-columns: 1fr 1fr 1fr; }
     }
@@ -118,6 +119,17 @@
       color: var(--accent-2);
       border: 1px solid rgba(34, 197, 94, 0.35);
     }
+    a.link-btn {
+      display: inline-block;
+      text-decoration: none;
+      padding: 6px 10px;
+      font-size: 0.82rem;
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-weight: 600;
+    }
     .rating-group {
       display: flex;
       gap: 6px;
@@ -126,7 +138,9 @@
     }
     .rate-btn {
       padding: 6px 10px;
-      font-size: 0.82rem;
+      font-size: 0.9rem;
+      line-height: 1.2;
+      letter-spacing: -0.05em;
       border-radius: 8px;
       background: var(--panel);
       color: var(--muted);
@@ -190,6 +204,17 @@
       background: rgba(56, 189, 248, 0.14);
       color: var(--accent);
       border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .avail-pill {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-left: 6px;
+      background: rgba(34, 197, 94, 0.14);
+      color: var(--accent-2);
+      border: 1px solid rgba(34, 197, 94, 0.32);
     }
     .rating-pill {
       display: inline-block;
@@ -292,9 +317,9 @@
         </select>
         <select id="ratingFilter" aria-label="Nach Bewertung filtern">
           <option value="Alle">Alle Bewertungen</option>
-          <option value="Finde ich super">Finde ich super</option>
-          <option value="Gefällt mir">Gefällt mir</option>
-          <option value="Nicht gefällt mir">Nicht gefällt mir</option>
+          <option value="Finde ich super">👍👍 Finde ich super</option>
+          <option value="Gefällt mir">👍 Gefällt mir</option>
+          <option value="Nicht gefällt mir">👎 Nicht gefällt mir</option>
           <option value="Ohne Bewertung">Ohne Bewertung</option>
         </select>
       </div>
@@ -303,9 +328,14 @@
     </section>
 
     <section class="card">
-      <h2>KI-Empfehlung (Gemini)</h2>
-      <div class="row two">
+      <h2>KI-Empfehlung &amp; Verfügbarkeit (Gemini)</h2>
+      <div class="row ai-top">
         <input id="moodInput" type="text" placeholder="Stimmung / Genre (z. B. Thriller, Sci-Fi, Doku)" />
+        <select id="availabilityMode" aria-label="Verfügbarkeits-Fokus">
+          <option value="Abo & Mediathek bevorzugt">Abo &amp; Mediathek bevorzugt</option>
+          <option value="Mediatheken / Free (ARD, ZDF, Tresat, Joyn, Netzkino)">Mediatheken / Free bevorzugt</option>
+          <option value="Alle Optionen inkl. Leihe/Kauf">Alle Optionen inkl. Leihe/Kauf</option>
+        </select>
         <button id="recommendBtn" type="button">Empfehlung vorschlagen</button>
       </div>
       <div id="aiStatus" class="status-msg">Trage unten deinen Gemini API-Key ein, um personalisierte Vorschläge zu erhalten.</div>
@@ -377,6 +407,7 @@
     const clearKeyBtn = document.getElementById("clearKeyBtn");
     const apiStatus = document.getElementById("apiStatus");
     const moodInput = document.getElementById("moodInput");
+    const availabilityMode = document.getElementById("availabilityMode");
     const recommendBtn = document.getElementById("recommendBtn");
     const aiStatus = document.getElementById("aiStatus");
     const aiRecommendations = document.getElementById("aiRecommendations");
@@ -443,6 +474,27 @@
       return match || "Sonstiges";
     }
 
+    function getRatingIcon(rating) {
+      if (rating === "Finde ich super") return "👍👍";
+      if (rating === "Gefällt mir") return "👍";
+      if (rating === "Nicht gefällt mir") return "👎";
+      return "";
+    }
+
+    function buildAvailabilityCheckUrl(title, provider) {
+      const queryParts = [stripMarkdown(title)];
+      if (provider && provider !== "Sonstiges") {
+        if (provider === "Tresat") {
+          queryParts.push("3sat Mediathek");
+        } else if (["ARD", "ZDF", "Joyn", "Netzkino"].includes(provider)) {
+          queryParts.push(provider + " Mediathek");
+        } else {
+          queryParts.push(provider);
+        }
+      }
+      return "https://www.google.com/search?q=" + encodeURIComponent(queryParts.join(" "));
+    }
+
     function addToWatchlist(title, provider, rating = null) {
       const cleanTitle = stripMarkdown(title);
       if (!cleanTitle) return;
@@ -468,9 +520,9 @@
       group.className = "rating-group";
 
       const configs = [
-        { value: "Nicht gefällt mir", label: "Nicht gefällt mir", activeClass: "selected-dislike" },
-        { value: "Gefällt mir", label: "Gefällt mir", activeClass: "selected-like" },
-        { value: "Finde ich super", label: "Finde ich super", activeClass: "selected-super" }
+        { value: "Nicht gefällt mir", icon: "👎", label: "Nicht gefällt mir", activeClass: "selected-dislike" },
+        { value: "Gefällt mir", icon: "👍", label: "Gefällt mir", activeClass: "selected-like" },
+        { value: "Finde ich super", icon: "👍👍", label: "Finde ich super", activeClass: "selected-super" }
       ];
 
       configs.forEach((cfg) => {
@@ -480,7 +532,9 @@
         if (currentRating === cfg.value) {
           btn.classList.add(cfg.activeClass);
         }
-        btn.textContent = cfg.label;
+        btn.textContent = cfg.icon;
+        btn.title = cfg.label;
+        btn.setAttribute("aria-label", cfg.label);
         btn.addEventListener("click", () => onSelect(cfg.value));
         group.append(btn);
       });
@@ -509,6 +563,7 @@
           const title = stripMarkdown(rec.title || "Unbekannter Titel");
           const year = rec.year ? " (" + escapeHtml(rec.year) + ")" : "";
           const provider = normalizeProvider(rec.provider);
+          const availability = stripMarkdown(rec.availability || "Verfügbarkeit prüfen");
           const runtime = rec.runtime ? escapeHtml(rec.runtime) : "";
           const reason = stripMarkdown(rec.reason || "");
           let chosenRating = null;
@@ -520,7 +575,20 @@
           head.className = "rec-head";
 
           const titleWrap = document.createElement("div");
-          titleWrap.innerHTML = "<strong>" + escapeHtml(title) + "</strong>" + year + '<span class="provider-pill">' + escapeHtml(provider) + "</span>";
+          titleWrap.innerHTML =
+            "<strong>" + escapeHtml(title) + "</strong>" + year +
+            '<span class="provider-pill">' + escapeHtml(provider) + "</span>" +
+            '<span class="avail-pill">' + escapeHtml(availability) + "</span>";
+
+          const rightActions = document.createElement("div");
+          rightActions.className = "actions";
+
+          const checkLink = document.createElement("a");
+          checkLink.className = "link-btn";
+          checkLink.href = buildAvailabilityCheckUrl(title, provider);
+          checkLink.target = "_blank";
+          checkLink.rel = "noopener noreferrer";
+          checkLink.textContent = "Verfügbarkeit prüfen";
 
           const addBtn = document.createElement("button");
           addBtn.type = "button";
@@ -533,7 +601,8 @@
             addBtn.disabled = true;
           });
 
-          head.append(titleWrap, addBtn);
+          rightActions.append(checkLink, addBtn);
+          head.append(titleWrap, rightActions);
 
           const meta = document.createElement("div");
           meta.className = "meta";
@@ -621,7 +690,7 @@
 
         const info = document.createElement("div");
         const ratingBadge = currentRating
-          ? '<span class="rating-pill">' + escapeHtml(currentRating) + "</span>"
+          ? '<span class="rating-pill">' + escapeHtml(getRatingIcon(currentRating) + " " + currentRating) + "</span>"
           : "";
         info.innerHTML =
           "<div>" +
@@ -708,11 +777,13 @@
     recommendBtn.addEventListener("click", async () => {
       const key = getApiKey();
       const mood = moodInput.value.trim() || "abwechslungsreich";
+      const availMode = availabilityMode.value;
+      const activeProviderFilter = providerFilter.value;
       const titles = items
         .map((i) => i.title + " [" + (i.provider || "Sonstiges") + ", " + i.status + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
         .join(", ");
 
-      debugLog('Starte Empfehlung | Origin: ' + window.location.origin + ' | Online: ' + navigator.onLine + ' | Stimmung: "' + mood + '"');
+      debugLog('Starte Empfehlung | Modus: "' + availMode + '" | Anbieter-Filter: "' + activeProviderFilter + '" | Stimmung: "' + mood + '"');
 
       if (!key) {
         aiStatus.textContent = "Demo-Hinweis: Für die Merkliste (" + (titles || "leer") + ") wäre ein guter nächster Titel im Bereich „" + mood + "“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte oben unter „Daten & API“ einen Key speichern.";
@@ -720,16 +791,23 @@
         return;
       }
 
-      aiStatus.textContent = "Frage Gemini an...";
+      aiStatus.textContent = "Frage Gemini an & prüfe Verfügbarkeitsangaben...";
       aiRecommendations.innerHTML = "";
 
+      const providerHint = activeProviderFilter !== "Alle"
+        ? "Bevorzuge stark den gewählten Anbieter '" + activeProviderFilter + "'."
+        : "Nutze passende Anbieter aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges.";
+
       const promptText = [
-        "Du bist ein hilfreicher Watchlist-Kurator.",
+        "Du bist ein hilfreicher Watchlist-Kurator für Deutschland.",
         "Aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
         "Bevorzuge Stil und Tonfall von Titeln mit 'Finde ich super', beziehe 'Gefällt mir' positiv ein und meide Ähnliches zu 'Nicht gefällt mir'.",
         "Wunsch/Stimmung: " + mood + ".",
+        "Verfügbarkeits-Vorgabe: " + availMode + ".",
+        providerHint,
+        "Achte besonders auf realistische Verfügbarkeit in deutschen Mediatheken (ARD, ZDF, Tresat/3sat, Joyn, Netzkino) oder Streaming-Diensten (ohne Live-Abruf-Garantie – markiere unsichere Fälle ehrlich mit 'Verfügbarkeit prüfen').",
         "Gib auf Deutsch 3 bis 4 konkrete Empfehlungen als reines JSON-Array (ohne Markdown-Codeblöcke) mit diesen Feldern:",
-        '[{"cluster":"Gruppenname z.B. Passgenau & straff","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","reason":"1 kurzer Satz Begründung"}]'
+        '[{"cluster":"Gruppenname z.B. In Mediatheken & Streaming","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Mediathek / Abo / Verfügbarkeit prüfen","reason":"1 kurzer Satz Begründung inkl. Verfügbarkeitshinweis"}]'
       ].join(" ");
 
       const apiHost = "generativelanguage.googleapis.com";
@@ -770,7 +848,7 @@
           try {
             const parsedRecs = parseRecommendationsJson(rawText);
             if (parsedRecs) {
-              aiStatus.textContent = "Vorschläge gruppiert nach Clustern (Modell: " + model + "):";
+              aiStatus.textContent = "Vorschläge mit Verfügbarkeitshinweisen (Modell: " + model + "):";
               renderRecommendations(parsedRecs);
               debugLog("JSON erfolgreich geparst (" + parsedRecs.length + " Einträge).");
             } else {
