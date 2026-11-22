@@ -520,6 +520,23 @@
       return null;
     }
 
+    function parseApiResponseText(rawBody, httpStatus) {
+      const trimmed = String(rawBody || "").trim();
+      if (!trimmed) {
+        throw new Error(`Leere Antwort (HTTP ${httpStatus})`);
+      }
+      if (trimmed.startsWith("<")) {
+        const snippet = trimmed.replace(/\s+/g, " ").slice(0, 120);
+        throw new Error(`Server lieferte HTML statt JSON (HTTP ${httpStatus}): ${snippet}`);
+      }
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        const snippet = trimmed.replace(/\s+/g, " ").slice(0, 120);
+        throw new Error(`Ungültiges JSON (HTTP ${httpStatus}): ${snippet}`);
+      }
+    }
+
     function renderList() {
       const selectedProvider = providerFilter.value;
       const selectedStatus = statusFilter.value;
@@ -685,7 +702,8 @@
               })
             }
           );
-          const data = await res.json();
+          const rawBody = await res.text();
+          const data = parseApiResponseText(rawBody, res.status);
           if (!res.ok) {
             throw new Error(data?.error?.message || `HTTP ${res.status}`);
           }
