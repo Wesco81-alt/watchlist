@@ -104,13 +104,21 @@
       font-size: 1rem;
       margin: 0 0 12px;
     }
+    .cluster-header {
+      margin: 16px 0 10px;
+      padding-left: 10px;
+      border-left: 3px solid var(--accent);
+    }
     .cluster-title {
-      font-size: 0.85rem;
+      font-size: 0.94rem;
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.01em;
       color: var(--accent);
-      margin: 14px 0 8px;
+    }
+    .cluster-desc {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 2px;
     }
     .row {
       display: grid;
@@ -929,18 +937,37 @@
 
       const grouped = new Map();
       for (const rec of recs) {
-        const clusterName = stripMarkdown(rec.cluster || "Passende Vorschläge");
-        if (!grouped.has(clusterName)) grouped.set(clusterName, []);
-        grouped.get(clusterName).push(rec);
+        const clusterName = stripMarkdown(rec.cluster || "Atmosphärische Entdeckungen");
+        const clusterDesc = stripMarkdown(
+          rec.clusterDesc || rec.clusterDescription || rec.clusterSummary || ""
+        );
+        if (!grouped.has(clusterName)) {
+          grouped.set(clusterName, { desc: clusterDesc, items: [] });
+        } else if (!grouped.get(clusterName).desc && clusterDesc) {
+          grouped.get(clusterName).desc = clusterDesc;
+        }
+        grouped.get(clusterName).items.push(rec);
       }
 
-      for (const [clusterName, groupItems] of grouped.entries()) {
+      for (const [clusterName, groupData] of grouped.entries()) {
+        const clusterHeader = document.createElement("div");
+        clusterHeader.className = "cluster-header";
+
         const heading = document.createElement("div");
         heading.className = "cluster-title";
         heading.textContent = clusterName;
-        aiRecommendations.append(heading);
+        clusterHeader.append(heading);
 
-        for (const rec of groupItems) {
+        if (groupData.desc) {
+          const descEl = document.createElement("div");
+          descEl.className = "cluster-desc";
+          descEl.textContent = groupData.desc;
+          clusterHeader.append(descEl);
+        }
+
+        aiRecommendations.append(clusterHeader);
+
+        for (const rec of groupData.items) {
           const title = stripMarkdown(rec.title || "Unbekannter Titel");
           const mediaType = normalizeMediaType(rec.type, rec);
           const year = rec.year ? " (" + escapeHtml(rec.year) + ")" : "";
@@ -1273,9 +1300,10 @@
         "Verfügbarkeits-Vorgabe: " + availMode + ".",
         providerHint,
         searchInstruction,
+        "Wichtig für 'cluster' und 'clusterDesc': Klastere die Empfehlungen inhaltlich, atmosphärisch oder nach Erzählweise/Thema (z. B. cluster: 'Psychologische Verwirrspiele mit Sogwirkung'). Verwende für 'cluster' NICHT bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Ergänze in 'clusterDesc' genau einen kurzen Satz (Einzeiler), der umschreibt, was diese Gruppe verbindet.",
         "Gib bei avHint eine kurze, unverbindliche Einschätzung zu Bild/Ton (z. B. 'HD / Stereo' oder 'UHD / 5.1 möglich').",
         "Antworte auf Deutsch mit 3 bis 4 konkreten Empfehlungen als reines JSON-Array (ohne einleitenden oder abschließenden Text) mit diesen Feldern:",
-        '[{"cluster":"Gruppenname z.B. Geprüft für Netzkino & Mediatheken","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"z.B. 113 Min. oder 2 Staffeln","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Per Suche plausibel / Mediathek / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Hinweis zur Verfügbarkeit"}]'
+        '[{"cluster":"Beschreibender thematischer oder atmosphärischer Gruppenname","clusterDesc":"Ein kurzer Satz, was diese Gruppe verbindet.","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"z.B. 113 Min. oder 2 Staffeln","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Per Suche plausibel / Mediathek / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Hinweis zur Verfügbarkeit"}]'
       ].join(" ");
 
       const apiHost = "generativelanguage.googleapis.com";
