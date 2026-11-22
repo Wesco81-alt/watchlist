@@ -620,8 +620,10 @@ function renderSeenList() {
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
-    removeBtn.className = "secondary";
-    removeBtn.textContent = "Markierung entfernen";
+    removeBtn.className = "unseen-btn";
+    removeBtn.textContent = "↩";
+    removeBtn.title = "Markierung entfernen";
+    removeBtn.setAttribute("aria-label", "Markierung entfernen");
     removeBtn.addEventListener("click", () => {
       removeSeenEntry(entry.title);
       renderSeenList();
