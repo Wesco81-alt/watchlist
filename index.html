@@ -732,10 +732,11 @@
         '[{"cluster":"Gruppenname z.B. Passgenau & straff","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","reason":"1 kurzer Satz Begründung"}]'
       ].join(" ");
 
+      const apiHost = "generativelanguage.googleapis.com";
       let lastError = null;
 
       for (const model of GEMINI_MODELS) {
-        const endpoint = "[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/)" + model + ":generateContent";
+        const endpoint = "https://" + apiHost + "/v1beta/models/" + model + ":generateContent";
         const requestUrl = endpoint + "?key=" + encodeURIComponent(key);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
