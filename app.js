@@ -21,68 +21,6 @@ const PROVIDERS = [
 const MEDIATHEK_FREE_PROVIDERS = ["ARD", "ZDF", "Tresat", "Joyn", "Netzkino"];
 const RATINGS = ["Nicht gefällt mir", "Gefällt mir", "Finde ich super"];
 
-let items = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-if (!Array.isArray(items) || items.length === 0) {
-  items = [
-    { id: crypto.randomUUID(), title: "Dark", type: "Serie", provider: "Netflix", rating: "Finde ich super" },
-    { id: crypto.randomUUID(), title: "Tatort", type: "Serie", provider: "ARD", rating: "Gefällt mir" }
-  ];
-  saveItems();
-}
-
-function loadSeenEntries() {
-  const rawV2 = localStorage.getItem(SEEN_TITLES_STORAGE);
-  if (rawV2) {
-    try {
-      const parsed = JSON.parse(rawV2);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .map((entry) => {
-            if (typeof entry === "string") {
-              return { title: stripMarkdown(entry), type: null };
-            }
-            if (entry && typeof entry === "object" && entry.title) {
-              return {
-                title: stripMarkdown(entry.title),
-                type: entry.type ? normalizeMediaType(entry.type) : null
-              };
-            }
-            return null;
-          })
-          .filter((e) => e && e.title);
-      }
-    } catch {
-      // ignore
-    }
-  }
-  const rawLegacy = localStorage.getItem(SEEN_TITLES_LEGACY_STORAGE);
-  if (rawLegacy) {
-    try {
-      const parsedLegacy = JSON.parse(rawLegacy);
-      if (Array.isArray(parsedLegacy)) {
-        const migrated = parsedLegacy
-          .filter((t) => typeof t === "string" && stripMarkdown(t))
-          .map((t) => ({ title: stripMarkdown(t), type: null }));
-        localStorage.setItem(SEEN_TITLES_STORAGE, JSON.stringify(migrated));
-        return migrated;
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return [];
-}
-
-let seenEntries = loadSeenEntries();
-
-let enabledProviders = JSON.parse(localStorage.getItem(ACTIVE_PROVIDERS_STORAGE) || "null");
-if (!Array.isArray(enabledProviders)) {
-  enabledProviders = [...PROVIDERS];
-  saveEnabledProviders();
-} else {
-  enabledProviders = enabledProviders.filter((p) => PROVIDERS.includes(p));
-}
-
 const navButtons = Array.from(document.querySelectorAll(".nav-btn"));
 const views = Array.from(document.querySelectorAll(".view"));
 const watchlistCountEl = document.getElementById("watchlistCount");
@@ -140,8 +78,10 @@ function debugLog(message) {
   const now = new Date().toISOString().slice(11, 23);
   debugLines.push("[" + now + "] " + message);
   if (debugLines.length > 80) debugLines = debugLines.slice(-80);
-  debugOutput.textContent = debugLines.join("\n");
-  debugOutput.scrollTop = debugOutput.scrollHeight;
+  if (debugOutput) {
+    debugOutput.textContent = debugLines.join("\n");
+    debugOutput.scrollTop = debugOutput.scrollHeight;
+  }
 }
 
 copyDebugBtn.addEventListener("click", async () => {
@@ -161,12 +101,16 @@ clearDebugBtn.addEventListener("click", () => {
 
 function saveItems() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  watchlistCountEl.textContent = String(items.length);
+  if (watchlistCountEl) {
+    watchlistCountEl.textContent = String(items.length);
+  }
 }
 
 function saveSeenEntries() {
   localStorage.setItem(SEEN_TITLES_STORAGE, JSON.stringify(seenEntries));
-  seenCountEl.textContent = String(seenEntries.length);
+  if (seenCountEl) {
+    seenCountEl.textContent = String(seenEntries.length);
+  }
 }
 
 function findSeenIndex(title) {
@@ -271,13 +215,17 @@ function syncProviderSelects() {
     providerFilter.value = previousFilterValue;
   }
 
-  activeProvidersCountEl.textContent = String(enabledProviders.length);
-  if (enabledProviders.length === 0) {
-    activeProviderSummaryEl.textContent = "Aktive Anbieter: Keine ausgewählt (bitte unter „Anbieter“ wählen).";
-  } else if (enabledProviders.length === PROVIDERS.length) {
-    activeProviderSummaryEl.textContent = "Aktive Anbieter: Alle (" + PROVIDERS.length + ")";
-  } else {
-    activeProviderSummaryEl.textContent = "Aktive Anbieter: " + enabledProviders.join(", ");
+  if (activeProvidersCountEl) {
+    activeProvidersCountEl.textContent = String(enabledProviders.length);
+  }
+  if (activeProviderSummaryEl) {
+    if (enabledProviders.length === 0) {
+      activeProviderSummaryEl.textContent = "Aktive Anbieter: Keine ausgewählt (bitte unter „Anbieter“ wählen).";
+    } else if (enabledProviders.length === PROVIDERS.length) {
+      activeProviderSummaryEl.textContent = "Aktive Anbieter: Alle (" + PROVIDERS.length + ")";
+    } else {
+      activeProviderSummaryEl.textContent = "Aktive Anbieter: " + enabledProviders.join(", ");
+    }
   }
 }
 
@@ -291,6 +239,7 @@ function toggleProvider(provider) {
 }
 
 function renderProviderToggles() {
+  if (!providerToggleGrid) return;
   providerToggleGrid.innerHTML = "";
   PROVIDERS.forEach((provider) => {
     const isEnabled = enabledProviders.includes(provider);
@@ -421,7 +370,9 @@ function createRatingControls(currentRating, onSelect) {
 }
 
 function renderSeenList() {
-  seenCountEl.textContent = String(seenEntries.length);
+  if (seenCountEl) {
+    seenCountEl.textContent = String(seenEntries.length);
+  }
   seenContainer.innerHTML = "";
   if (seenEntries.length === 0) {
     seenContainer.innerHTML = '<div class="meta">Noch keine Titel als gesehen markiert.</div>';
@@ -461,7 +412,9 @@ function renderSeenList() {
 }
 
 function renderList() {
-  watchlistCountEl.textContent = String(items.length);
+  if (watchlistCountEl) {
+    watchlistCountEl.textContent = String(items.length);
+  }
   const selectedProvider = providerFilter.value;
   const selectedRating = ratingFilter.value;
 
@@ -616,6 +569,68 @@ recommendBtn.addEventListener("click", async () => {
     onLog: debugLog
   });
 });
+
+let items = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+if (!Array.isArray(items) || items.length === 0) {
+  items = [
+    { id: crypto.randomUUID(), title: "Dark", type: "Serie", provider: "Netflix", rating: "Finde ich super" },
+    { id: crypto.randomUUID(), title: "Tatort", type: "Serie", provider: "ARD", rating: "Gefällt mir" }
+  ];
+  saveItems();
+}
+
+function loadSeenEntries() {
+  const rawV2 = localStorage.getItem(SEEN_TITLES_STORAGE);
+  if (rawV2) {
+    try {
+      const parsed = JSON.parse(rawV2);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((entry) => {
+            if (typeof entry === "string") {
+              return { title: stripMarkdown(entry), type: null };
+            }
+            if (entry && typeof entry === "object" && entry.title) {
+              return {
+                title: stripMarkdown(entry.title),
+                type: entry.type ? normalizeMediaType(entry.type) : null
+              };
+            }
+            return null;
+          })
+          .filter((e) => e && e.title);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  const rawLegacy = localStorage.getItem(SEEN_TITLES_LEGACY_STORAGE);
+  if (rawLegacy) {
+    try {
+      const parsedLegacy = JSON.parse(rawLegacy);
+      if (Array.isArray(parsedLegacy)) {
+        const migrated = parsedLegacy
+          .filter((t) => typeof t === "string" && stripMarkdown(t))
+          .map((t) => ({ title: stripMarkdown(t), type: null }));
+        localStorage.setItem(SEEN_TITLES_STORAGE, JSON.stringify(migrated));
+        return migrated;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return [];
+}
+
+let seenEntries = loadSeenEntries();
+
+let enabledProviders = JSON.parse(localStorage.getItem(ACTIVE_PROVIDERS_STORAGE) || "null");
+if (!Array.isArray(enabledProviders)) {
+  enabledProviders = [...PROVIDERS];
+  saveEnabledProviders();
+} else {
+  enabledProviders = enabledProviders.filter((p) => PROVIDERS.includes(p));
+}
 
 renderVersionInfo();
 seenCountEl.textContent = String(seenEntries.length);
