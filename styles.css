@@ -277,6 +277,23 @@ a.link-btn {
   border-color: rgba(34, 197, 94, 0.5);
 }
 
+.unseen-btn {
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.unseen-btn:hover {
+  color: var(--danger);
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.12);
+}
+
 .provider-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
