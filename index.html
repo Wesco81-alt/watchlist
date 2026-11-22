@@ -15,6 +15,7 @@
       --accent: #38bdf8;
       --accent-2: #22c55e;
       --super: #f59e0b;
+      --type-pill: #a78bfa;
       --danger: #f87171;
       --border: rgba(148, 163, 184, 0.18);
     }
@@ -119,8 +120,8 @@
     @media (min-width: 640px) {
       .row.two { grid-template-columns: 1fr 1fr; }
       .row.ai-top { grid-template-columns: 1.4fr 1fr auto; }
-      .row.add { grid-template-columns: 2fr 1fr 1fr auto; }
-      .row.filters { grid-template-columns: 1fr 1fr 1fr; }
+      .row.add { grid-template-columns: 2fr 1fr 1fr 1fr auto; }
+      .row.filters { grid-template-columns: 1fr 1fr; }
     }
     input, select, textarea, button {
       font: inherit;
@@ -298,13 +299,24 @@
       gap: 8px;
       flex-wrap: wrap;
     }
+    .type-pill {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-left: 8px;
+      background: rgba(167, 139, 250, 0.16);
+      color: var(--type-pill);
+      border: 1px solid rgba(167, 139, 250, 0.36);
+    }
     .provider-pill {
       display: inline-block;
       font-size: 0.75rem;
       font-weight: 600;
       padding: 2px 8px;
       border-radius: 999px;
-      margin-left: 8px;
+      margin-left: 6px;
       background: rgba(56, 189, 248, 0.14);
       color: var(--accent);
       border: 1px solid rgba(56, 189, 248, 0.3);
@@ -373,6 +385,7 @@
     <nav class="menu-bar" aria-label="Hauptmenü">
       <button type="button" class="nav-btn active" data-view="discoverView">Empfehlungen &amp; Neu</button>
       <button type="button" class="nav-btn" data-view="watchlistView">Merkliste (<span id="watchlistCount">0</span>)</button>
+      <button type="button" class="nav-btn" data-view="seenView">Gesehen (<span id="seenCount">0</span>)</button>
       <button type="button" class="nav-btn" data-view="providersView">Anbieter (<span id="activeProvidersCount">0</span>)</button>
       <button type="button" class="nav-btn" data-view="apiView">API &amp; Debug</button>
     </nav>
@@ -404,10 +417,13 @@
         <h2>Titel direkt zur Merkliste hinzufügen</h2>
         <form id="addForm" class="row add">
           <input id="titleInput" type="text" placeholder="Film, Serie oder Doku eingeben..." required />
+          <select id="typeInput" aria-label="Art des Titels">
+            <option value="Film">Film</option>
+            <option value="Serie">Serie</option>
+          </select>
           <select id="providerInput" aria-label="Anbieter"></select>
           <select id="statusInput" aria-label="Status">
             <option value="Geplant">Geplant</option>
-            <option value="Läuft">Läuft</option>
             <option value="Gesehen">Gesehen</option>
           </select>
           <button type="submit">Hinzufügen</button>
@@ -420,12 +436,6 @@
         <h2>Meine Merkliste</h2>
         <div class="row filters">
           <select id="providerFilter" aria-label="Nach Anbieter filtern"></select>
-          <select id="statusFilter" aria-label="Nach Status filtern">
-            <option value="Alle">Alle Status</option>
-            <option value="Geplant">Geplant</option>
-            <option value="Läuft">Läuft</option>
-            <option value="Gesehen">Gesehen</option>
-          </select>
           <select id="ratingFilter" aria-label="Nach Bewertung filtern">
             <option value="Alle">Alle Bewertungen</option>
             <option value="Finde ich super">👍👍 Finde ich super</option>
@@ -435,6 +445,14 @@
           </select>
         </div>
         <div class="list" id="watchlistContainer"></div>
+      </section>
+    </div>
+
+    <div id="seenView" class="view">
+      <section class="card">
+        <h2>Als gesehen markierte Titel</h2>
+        <div class="meta">Diese Titel werden bei KI-Empfehlungen ausgespart. Bei versehentlicher Markierung kannst du einen Titel hier wieder entfernen.</div>
+        <div class="list" id="seenContainer"></div>
       </section>
     </div>
 
@@ -477,7 +495,8 @@
 
   <script>
     const STORAGE_KEY = "watchlist_kurator_items_v4";
-    const SEEN_TITLES_STORAGE = "watchlist_kurator_seen_titles_v1";
+    const SEEN_TITLES_STORAGE = "watchlist_kurator_seen_titles_v2";
+    const SEEN_TITLES_LEGACY_STORAGE = "watchlist_kurator_seen_titles_v1";
     const API_KEY_STORAGE = "watchlist_kurator_gemini_key_v1";
     const ACTIVE_PROVIDERS_STORAGE = "watchlist_kurator_active_providers_v1";
     const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
@@ -496,22 +515,61 @@
       "Sonstiges"
     ];
     const MEDIATHEK_FREE_PROVIDERS = ["ARD", "ZDF", "Tresat", "Joyn", "Netzkino"];
-    const STATUSES = ["Geplant", "Läuft", "Gesehen"];
     const RATINGS = ["Nicht gefällt mir", "Gefällt mir", "Finde ich super"];
 
     let items = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
     if (!Array.isArray(items) || items.length === 0) {
       items = [
-        { id: crypto.randomUUID(), title: "Dark", provider: "Netflix", status: "Geplant", rating: "Finde ich super" },
-        { id: crypto.randomUUID(), title: "Tatort", provider: "ARD", status: "Läuft", rating: "Gefällt mir" }
+        { id: crypto.randomUUID(), title: "Dark", type: "Serie", provider: "Netflix", rating: "Finde ich super" },
+        { id: crypto.randomUUID(), title: "Tatort", type: "Serie", provider: "ARD", rating: "Gefällt mir" }
       ];
       saveItems();
     }
 
-    let seenTitles = JSON.parse(localStorage.getItem(SEEN_TITLES_STORAGE) || "[]");
-    if (!Array.isArray(seenTitles)) {
-      seenTitles = [];
+    function loadSeenEntries() {
+      const rawV2 = localStorage.getItem(SEEN_TITLES_STORAGE);
+      if (rawV2) {
+        try {
+          const parsed = JSON.parse(rawV2);
+          if (Array.isArray(parsed)) {
+            return parsed
+              .map((entry) => {
+                if (typeof entry === "string") {
+                  return { title: stripMarkdown(entry), type: null };
+                }
+                if (entry && typeof entry === "object" && entry.title) {
+                  return {
+                    title: stripMarkdown(entry.title),
+                    type: entry.type ? normalizeMediaType(entry.type) : null
+                  };
+                }
+                return null;
+              })
+              .filter((e) => e && e.title);
+          }
+        } catch {
+          // ignore
+        }
+      }
+      const rawLegacy = localStorage.getItem(SEEN_TITLES_LEGACY_STORAGE);
+      if (rawLegacy) {
+        try {
+          const parsedLegacy = JSON.parse(rawLegacy);
+          if (Array.isArray(parsedLegacy)) {
+            const migrated = parsedLegacy
+              .filter((t) => typeof t === "string" && stripMarkdown(t))
+              .map((t) => ({ title: stripMarkdown(t), type: null }));
+            localStorage.setItem(SEEN_TITLES_STORAGE, JSON.stringify(migrated));
+            return migrated;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return [];
     }
+
+    let seenEntries = loadSeenEntries();
 
     let enabledProviders = JSON.parse(localStorage.getItem(ACTIVE_PROVIDERS_STORAGE) || "null");
     if (!Array.isArray(enabledProviders)) {
@@ -524,6 +582,7 @@
     const navButtons = Array.from(document.querySelectorAll(".nav-btn"));
     const views = Array.from(document.querySelectorAll(".view"));
     const watchlistCountEl = document.getElementById("watchlistCount");
+    const seenCountEl = document.getElementById("seenCount");
     const activeProvidersCountEl = document.getElementById("activeProvidersCount");
     const activeProviderSummaryEl = document.getElementById("activeProviderSummary");
     const providerToggleGrid = document.getElementById("providerToggleGrid");
@@ -532,12 +591,13 @@
     const clearProvidersBtn = document.getElementById("clearProvidersBtn");
 
     const watchlistContainer = document.getElementById("watchlistContainer");
+    const seenContainer = document.getElementById("seenContainer");
     const addForm = document.getElementById("addForm");
     const titleInput = document.getElementById("titleInput");
+    const typeInput = document.getElementById("typeInput");
     const providerInput = document.getElementById("providerInput");
     const statusInput = document.getElementById("statusInput");
     const providerFilter = document.getElementById("providerFilter");
-    const statusFilter = document.getElementById("statusFilter");
     const ratingFilter = document.getElementById("ratingFilter");
     const apiKeyInput = document.getElementById("apiKeyInput");
     const saveKeyBtn = document.getElementById("saveKeyBtn");
@@ -593,29 +653,86 @@
       watchlistCountEl.textContent = String(items.length);
     }
 
-    function saveSeenTitles() {
-      localStorage.setItem(SEEN_TITLES_STORAGE, JSON.stringify(seenTitles));
+    function saveSeenEntries() {
+      localStorage.setItem(SEEN_TITLES_STORAGE, JSON.stringify(seenEntries));
+      seenCountEl.textContent = String(seenEntries.length);
     }
 
-    function toggleSeenTitle(title) {
+    function findSeenIndex(title) {
+      const lower = stripMarkdown(title).toLowerCase();
+      return seenEntries.findIndex((e) => String(e.title).toLowerCase() === lower);
+    }
+
+    function isTitleMarkedSeen(title) {
+      return findSeenIndex(title) !== -1;
+    }
+
+    function addSeenEntry(title, mediaType = null) {
+      const clean = stripMarkdown(title);
+      if (!clean) return;
+      const idx = findSeenIndex(clean);
+      const normalizedType = mediaType ? normalizeMediaType(mediaType) : null;
+      if (idx === -1) {
+        seenEntries.unshift({ title: clean, type: normalizedType });
+      } else if (normalizedType && !seenEntries[idx].type) {
+        seenEntries[idx].type = normalizedType;
+      }
+      saveSeenEntries();
+    }
+
+    function removeSeenEntry(title) {
+      const clean = stripMarkdown(title);
+      if (!clean) return;
+      const lower = clean.toLowerCase();
+      seenEntries = seenEntries.filter((e) => String(e.title).toLowerCase() !== lower);
+      saveSeenEntries();
+    }
+
+    function toggleSeenTitle(title, mediaType = null) {
       const clean = stripMarkdown(title);
       if (!clean) return false;
-      const lower = clean.toLowerCase();
-      const exists = seenTitles.some((t) => String(t).toLowerCase() === lower);
-      if (exists) {
-        seenTitles = seenTitles.filter((t) => String(t).toLowerCase() !== lower);
-        saveSeenTitles();
+      if (isTitleMarkedSeen(clean)) {
+        removeSeenEntry(clean);
+        renderSeenList();
         return false;
       } else {
-        seenTitles.push(clean);
-        saveSeenTitles();
+        addSeenEntry(clean, mediaType);
+        renderSeenList();
         return true;
       }
     }
 
-    function isTitleMarkedSeen(title) {
-      const lower = stripMarkdown(title).toLowerCase();
-      return seenTitles.some((t) => String(t).toLowerCase() === lower);
+    function markTitleAsSeen(title, mediaType = null) {
+      const clean = stripMarkdown(title);
+      if (!clean) return;
+      const lower = clean.toLowerCase();
+      const existingItem = items.find((entry) => stripMarkdown(entry.title).toLowerCase() === lower);
+      const resolvedType = mediaType || existingItem?.type || null;
+      addSeenEntry(clean, resolvedType);
+      items = items.filter((entry) => stripMarkdown(entry.title).toLowerCase() !== lower);
+      saveItems();
+      renderList();
+      renderSeenList();
+    }
+
+    function createSeenButton(title, mediaType = null, onAfterToggle = null) {
+      let isSeen = isTitleMarkedSeen(title);
+      const seenBtn = document.createElement("button");
+      seenBtn.type = "button";
+      seenBtn.className = "seen-btn" + (isSeen ? " active" : "");
+      seenBtn.textContent = "✓ Gesehen";
+      seenBtn.title = "Als bereits gesehen markieren";
+      seenBtn.setAttribute("aria-label", "Als bereits gesehen markieren");
+      seenBtn.setAttribute("aria-pressed", String(isSeen));
+      seenBtn.addEventListener("click", () => {
+        isSeen = toggleSeenTitle(title, mediaType);
+        seenBtn.classList.toggle("active", isSeen);
+        seenBtn.setAttribute("aria-pressed", String(isSeen));
+        if (typeof onAfterToggle === "function") {
+          onAfterToggle(isSeen);
+        }
+      });
+      return seenBtn;
     }
 
     function saveEnabledProviders() {
@@ -723,6 +840,21 @@
       return match || "Sonstiges";
     }
 
+    function normalizeMediaType(raw, rec = {}) {
+      const candidate = String(raw || rec.category || rec.format || "").trim().toLowerCase();
+      if (/(serie|series|staffel|miniserie|show|tv-serie)/i.test(candidate)) {
+        return "Serie";
+      }
+      if (/(film|movie|spielfilm|kinofilm|doku|dokumentation)/i.test(candidate)) {
+        return candidate.includes("doku") ? "Doku" : "Film";
+      }
+      const runtimeStr = String(rec.runtime || "").toLowerCase();
+      if (/staffel|folgen|episoden/i.test(runtimeStr)) {
+        return "Serie";
+      }
+      return "Film";
+    }
+
     function getRatingIcon(rating) {
       if (rating === "Finde ich super") return "👍👍";
       if (rating === "Gefällt mir") return "👍";
@@ -744,14 +876,14 @@
       return "https://www.google.com/search?q=" + encodeURIComponent(queryParts.join(" "));
     }
 
-    function addToWatchlist(title, provider, rating = null) {
+    function addToWatchlist(title, provider, rating = null, mediaType = null) {
       const cleanTitle = stripMarkdown(title);
       if (!cleanTitle) return;
       items.unshift({
         id: crypto.randomUUID(),
         title: cleanTitle,
+        type: mediaType ? normalizeMediaType(mediaType) : null,
         provider: normalizeProvider(provider),
-        status: "Geplant",
         rating: RATINGS.includes(rating) ? rating : null
       });
       saveItems();
@@ -810,6 +942,7 @@
 
         for (const rec of groupItems) {
           const title = stripMarkdown(rec.title || "Unbekannter Titel");
+          const mediaType = normalizeMediaType(rec.type, rec);
           const year = rec.year ? " (" + escapeHtml(rec.year) + ")" : "";
           const provider = normalizeProvider(rec.provider);
           const availability = stripMarkdown(rec.availability || "Verfügbarkeit prüfen");
@@ -817,7 +950,6 @@
           const avHint = stripMarkdown(rec.avHint || "");
           const reason = stripMarkdown(rec.reason || "");
           let chosenRating = null;
-          let isSeen = isTitleMarkedSeen(title);
 
           const card = document.createElement("div");
           card.className = "rec-card";
@@ -828,6 +960,7 @@
           const titleWrap = document.createElement("div");
           titleWrap.innerHTML =
             "<strong>" + escapeHtml(title) + "</strong>" + year +
+            '<span class="type-pill">' + escapeHtml(mediaType) + "</span>" +
             '<span class="provider-pill">' + escapeHtml(provider) + "</span>" +
             '<span class="avail-pill">' + escapeHtml(availability) + "</span>";
 
@@ -846,7 +979,7 @@
           addBtn.className = "secondary";
           addBtn.textContent = "+ Merkliste";
           addBtn.addEventListener("click", () => {
-            addToWatchlist(title, provider, chosenRating);
+            addToWatchlist(title, provider, chosenRating, mediaType);
             addBtn.textContent = "Gespeichert";
             addBtn.className = "success";
             addBtn.disabled = true;
@@ -869,18 +1002,7 @@
           const feedbackRow = document.createElement("div");
           feedbackRow.className = "rec-feedback-row";
 
-          const seenBtn = document.createElement("button");
-          seenBtn.type = "button";
-          seenBtn.className = "seen-btn" + (isSeen ? " active" : "");
-          seenBtn.textContent = "✓ Gesehen";
-          seenBtn.title = "Als bereits gesehen markieren (nicht in die Merkliste)";
-          seenBtn.setAttribute("aria-label", "Als bereits gesehen markieren");
-          seenBtn.setAttribute("aria-pressed", String(isSeen));
-          seenBtn.addEventListener("click", () => {
-            isSeen = toggleSeenTitle(title);
-            seenBtn.classList.toggle("active", isSeen);
-            seenBtn.setAttribute("aria-pressed", String(isSeen));
-          });
+          const seenBtn = createSeenButton(title, mediaType);
 
           function mountRatingControls() {
             const group = createRatingControls(chosenRating, (val) => {
@@ -946,22 +1068,58 @@
       }
     }
 
+    function renderSeenList() {
+      seenCountEl.textContent = String(seenEntries.length);
+      seenContainer.innerHTML = "";
+      if (seenEntries.length === 0) {
+        seenContainer.innerHTML = '<div class="meta">Noch keine Titel als gesehen markiert.</div>';
+        return;
+      }
+
+      seenEntries.forEach((entry) => {
+        const div = document.createElement("div");
+        div.className = "item";
+
+        const typeBadge = entry.type
+          ? '<span class="type-pill">' + escapeHtml(entry.type) + "</span>"
+          : "";
+
+        const info = document.createElement("div");
+        info.innerHTML = "<strong>" + escapeHtml(entry.title) + "</strong>" + typeBadge;
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "secondary";
+        removeBtn.textContent = "Markierung entfernen";
+        removeBtn.addEventListener("click", () => {
+          removeSeenEntry(entry.title);
+          renderSeenList();
+          renderList();
+        });
+
+        actions.append(removeBtn);
+        div.append(info, actions);
+        seenContainer.append(div);
+      });
+    }
+
     function renderList() {
       watchlistCountEl.textContent = String(items.length);
       const selectedProvider = providerFilter.value;
-      const selectedStatus = statusFilter.value;
       const selectedRating = ratingFilter.value;
 
       const filtered = items.filter((item) => {
         const providerMatch = selectedProvider === "Alle" || item.provider === selectedProvider;
-        const statusMatch = selectedStatus === "Alle" || item.status === selectedStatus;
         let ratingMatch = true;
         if (selectedRating === "Ohne Bewertung") {
           ratingMatch = !item.rating;
         } else if (selectedRating !== "Alle") {
           ratingMatch = item.rating === selectedRating;
         }
-        return providerMatch && statusMatch && ratingMatch;
+        return providerMatch && ratingMatch;
       });
 
       watchlistContainer.innerHTML = "";
@@ -972,8 +1130,10 @@
 
       filtered.forEach((item) => {
         const providerName = PROVIDERS.includes(item.provider) ? item.provider : "Sonstiges";
-        const currentStatus = STATUSES.includes(item.status) ? item.status : "Geplant";
         const currentRating = RATINGS.includes(item.rating) ? item.rating : null;
+        const typeBadge = item.type
+          ? '<span class="type-pill">' + escapeHtml(item.type) + "</span>"
+          : "";
 
         const div = document.createElement("div");
         div.className = "item";
@@ -985,10 +1145,10 @@
         info.innerHTML =
           "<div>" +
             "<strong>" + escapeHtml(item.title) + "</strong>" +
+            typeBadge +
             '<span class="provider-pill">' + escapeHtml(providerName) + "</span>" +
             ratingBadge +
-          "</div>" +
-          '<div class="meta">Status: ' + escapeHtml(currentStatus) + "</div>";
+          "</div>";
 
         const ratingControls = createRatingControls(currentRating, (nextRating) => {
           setItemRating(item, nextRating);
@@ -997,15 +1157,14 @@
         const actions = document.createElement("div");
         actions.className = "actions";
 
-        const nextBtn = document.createElement("button");
-        nextBtn.type = "button";
-        nextBtn.className = "secondary";
-        nextBtn.textContent = "Status wechseln";
-        nextBtn.addEventListener("click", () => {
-          const next = STATUSES[(STATUSES.indexOf(currentStatus) + 1) % STATUSES.length];
-          item.status = next;
-          saveItems();
-          renderList();
+        const seenBtn = document.createElement("button");
+        seenBtn.type = "button";
+        seenBtn.className = "seen-btn";
+        seenBtn.textContent = "✓ Gesehen";
+        seenBtn.title = "Als gesehen markieren und aus der Merkliste entfernen";
+        seenBtn.setAttribute("aria-label", "Als gesehen markieren und aus der Merkliste entfernen");
+        seenBtn.addEventListener("click", () => {
+          markTitleAsSeen(item.title, item.type);
         });
 
         const delBtn = document.createElement("button");
@@ -1018,7 +1177,7 @@
           renderList();
         });
 
-        actions.append(ratingControls, nextBtn, delBtn);
+        actions.append(ratingControls, seenBtn, delBtn);
         div.append(info, actions);
         watchlistContainer.append(div);
       });
@@ -1028,11 +1187,19 @@
       e.preventDefault();
       const title = titleInput.value.trim();
       if (!title) return;
+      const chosenType = typeInput ? normalizeMediaType(typeInput.value) : "Film";
+      if (statusInput && statusInput.value === "Gesehen") {
+        addSeenEntry(title, chosenType);
+        renderSeenList();
+        titleInput.value = "";
+        titleInput.focus();
+        return;
+      }
       items.unshift({
         id: crypto.randomUUID(),
         title,
+        type: chosenType,
         provider: providerInput.value,
-        status: statusInput.value,
         rating: null
       });
       saveItems();
@@ -1042,7 +1209,6 @@
     });
 
     providerFilter.addEventListener("change", renderList);
-    statusFilter.addEventListener("change", renderList);
     ratingFilter.addEventListener("change", renderList);
 
     saveKeyBtn.addEventListener("click", () => {
@@ -1071,9 +1237,11 @@
       const searchEnabled = Boolean(useSearchToggle.checked);
       const providerPool = enabledProviders.length > 0 ? enabledProviders : PROVIDERS;
       const titles = items
-        .map((i) => i.title + " [" + (i.provider || "Sonstiges") + ", " + i.status + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
+        .map((i) => i.title + (i.type ? " (" + i.type + ")" : "") + " [" + (i.provider || "Sonstiges") + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
         .join(", ");
-      const seenListText = seenTitles.length > 0 ? seenTitles.join(", ") : "keine";
+      const seenListText = seenEntries.length > 0
+        ? seenEntries.map((e) => e.title + (e.type ? " (" + e.type + ")" : "")).join(", ")
+        : "keine";
 
       debugLog('Starte Empfehlung | Web-Suche: ' + (searchEnabled ? "AN" : "AUS") + ' | Modus: "' + availMode + '" | Aktive Anbieter: [' + providerPool.join(", ") + '] | Stimmung: "' + mood + '"');
 
@@ -1107,7 +1275,7 @@
         searchInstruction,
         "Gib bei avHint eine kurze, unverbindliche Einschätzung zu Bild/Ton (z. B. 'HD / Stereo' oder 'UHD / 5.1 möglich').",
         "Antworte auf Deutsch mit 3 bis 4 konkreten Empfehlungen als reines JSON-Array (ohne einleitenden oder abschließenden Text) mit diesen Feldern:",
-        '[{"cluster":"Gruppenname z.B. Geprüft für Netzkino & Mediatheken","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Per Suche plausibel / Mediathek / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Hinweis zur Verfügbarkeit"}]'
+        '[{"cluster":"Gruppenname z.B. Geprüft für Netzkino & Mediatheken","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"z.B. 113 Min. oder 2 Staffeln","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Per Suche plausibel / Mediathek / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Hinweis zur Verfügbarkeit"}]'
       ].join(" ");
 
       const apiHost = "generativelanguage.googleapis.com";
@@ -1211,10 +1379,12 @@
       }
     });
 
+    seenCountEl.textContent = String(seenEntries.length);
     updateApiBadge();
     syncProviderSelects();
     renderProviderToggles();
     renderList();
+    renderSeenList();
     debugLog("Watchlist-Kurator initialisiert.");
   </script>
 </body>
