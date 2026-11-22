@@ -219,6 +219,20 @@
       color: var(--muted);
       white-space: pre-wrap;
     }
+    .debug-box {
+      margin-top: 10px;
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.76rem;
+      color: #cbd5e1;
+      max-height: 260px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
   </style>
 </head>
 <body>
@@ -309,6 +323,15 @@
       </div>
       <div id="keyHint" class="status-msg">Der API-Key wird ausschließlich im lokalen Speicher (localStorage) deines Browsers abgelegt.</div>
     </section>
+
+    <section class="card">
+      <h2>Debug-Protokoll</h2>
+      <div class="actions">
+        <button id="copyDebugBtn" type="button" class="secondary">Log kopieren</button>
+        <button id="clearDebugBtn" type="button" class="secondary">Log leeren</button>
+      </div>
+      <div id="debugOutput" class="debug-box">Bereit – noch keine Anfrage protokolliert.</div>
+    </section>
   </main>
 
   <script>
@@ -357,6 +380,34 @@
     const recommendBtn = document.getElementById("recommendBtn");
     const aiStatus = document.getElementById("aiStatus");
     const aiRecommendations = document.getElementById("aiRecommendations");
+    const debugOutput = document.getElementById("debugOutput");
+    const copyDebugBtn = document.getElementById("copyDebugBtn");
+    const clearDebugBtn = document.getElementById("clearDebugBtn");
+
+    let debugLines = [];
+
+    function debugLog(message) {
+      const now = new Date().toISOString().slice(11, 23);
+      debugLines.push(`[${now}] ${message}`);
+      if (debugLines.length > 80) debugLines = debugLines.slice(-80);
+      debugOutput.textContent = debugLines.join("\n");
+      debugOutput.scrollTop = debugOutput.scrollHeight;
+    }
+
+    copyDebugBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(debugOutput.textContent);
+        copyDebugBtn.textContent = "Kopiert";
+        setTimeout(() => { copyDebugBtn.textContent = "Log kopieren"; }, 1500);
+      } catch {
+        debugLog("Zwischenablage nicht direkt verfügbar – Text manuell markieren.");
+      }
+    });
+
+    clearDebugBtn.addEventListener("click", () => {
+      debugLines = [];
+      debugOutput.textContent = "Log geleert.";
+    });
 
     function saveItems() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -526,13 +577,13 @@
         throw new Error(`Leere Antwort (HTTP ${httpStatus})`);
       }
       if (trimmed.startsWith("<")) {
-        const snippet = trimmed.replace(/\s+/g, " ").slice(0, 120);
+        const snippet = trimmed.replace(/\s+/g, " ").slice(0, 180);
         throw new Error(`Server lieferte HTML statt JSON (HTTP ${httpStatus}): ${snippet}`);
       }
       try {
         return JSON.parse(trimmed);
       } catch {
-        const snippet = trimmed.replace(/\s+/g, " ").slice(0, 120);
+        const snippet = trimmed.replace(/\s+/g, " ").slice(0, 180);
         throw new Error(`Ungültiges JSON (HTTP ${httpStatus}): ${snippet}`);
       }
     }
@@ -643,6 +694,7 @@
       apiKeyInput.value = "";
       updateApiBadge();
       aiStatus.textContent = "API-Key lokal gespeichert. Du kannst jetzt eine Empfehlung anfordern.";
+      debugLog(`API-Key gespeichert (Länge: ${val.length} Zeichen).`);
     });
 
     clearKeyBtn.addEventListener("click", () => {
@@ -651,6 +703,7 @@
       updateApiBadge();
       aiStatus.textContent = "Gespeicherter API-Key entfernt.";
       aiRecommendations.innerHTML = "";
+      debugLog("API-Key entfernt.");
     });
 
     recommendBtn.addEventListener("click", async () => {
@@ -660,8 +713,11 @@
         .map((i) => `${i.title} [${i.provider || "Sonstiges"}, ${i.status}${i.rating ? `, Bewertung: ${i.rating}` : ""}]`)
         .join(", ");
 
+      debugLog(`Starte Empfehlung | Origin: ${window.location.origin} | Online: ${navigator.onLine} | Stimmung: "${mood}"`);
+
       if (!key) {
         aiStatus.textContent = `Demo-Hinweis: Für die Merkliste (${titles || "leer"}) wäre ein guter nächster Titel im Bereich „${mood}“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte oben unter „Daten & API“ einen Key speichern.`;
+        debugLog("Kein API-Key vorhanden -> Demo-Ausgabe.");
         return;
       }
 
@@ -680,49 +736,56 @@
       let lastError = null;
 
       for (const model of GEMINI_MODELS) {
+        const endpoint = `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){model}:generateContent`;
+        const requestUrl = `${endpoint}?key=${encodeURIComponent(key)}`;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
 
+        debugLog(`POST ${endpoint} (Modell: ${model})`);
+
         try {
-          const res = await fetch(
-            `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){model}:generateContent?key=${encodeURIComponent(key)}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              signal: controller.signal,
-              body: JSON.stringify({
-                contents: [{
-                  parts: [{ text: promptText }]
-                }],
-                generationConfig: {
-                  thinkingConfig: {
-                    thinkingBudget: 0
-                  }
+          const res = await fetch(requestUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              contents: [{
+                parts: [{ text: promptText }]
+              }],
+              generationConfig: {
+                thinkingConfig: {
+                  thinkingBudget: 0
                 }
-              })
-            }
-          );
+              }
+            })
+          });
           const rawBody = await res.text();
+          debugLog(`Antwort von ${model}: HTTP ${res.status}, Final-URL: ${res.url}, Länge: ${rawBody.length} Zeichen`);
           const data = parseApiResponseText(rawBody, res.status);
           if (!res.ok) {
             throw new Error(data?.error?.message || `HTTP ${res.status}`);
           }
           const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          debugLog(`Kandidatentext erhalten (${rawText.length} Zeichen).`);
           try {
             const parsedRecs = parseRecommendationsJson(rawText);
             if (parsedRecs) {
               aiStatus.textContent = `Vorschläge gruppiert nach Clustern (Modell: ${model}):`;
               renderRecommendations(parsedRecs);
+              debugLog(`JSON erfolgreich geparst (${parsedRecs.length} Einträge).`);
             } else {
               aiStatus.textContent = stripMarkdown(rawText) || "Keine Antwort erhalten.";
+              debugLog("Kein Array in JSON gefunden -> Textausgabe.");
             }
           } catch {
             aiStatus.textContent = stripMarkdown(rawText) || "Keine Antwort erhalten.";
+            debugLog("Antwort war kein JSON -> Textausgabe.");
           }
           clearTimeout(timeoutId);
           return;
         } catch (err) {
           lastError = err;
+          debugLog(`Fehler bei ${model}: ${err.name}: ${err.message}`);
           const isOverloaded = /high demand|overloaded|503|429|UNAVAILABLE/i.test(err.message || "");
           if (!isOverloaded && err.name !== "AbortError") {
             clearTimeout(timeoutId);
@@ -743,6 +806,7 @@
 
     updateApiBadge();
     renderList();
+    debugLog("Watchlist-Kurator initialisiert.");
   </script>
 </body>
 </html>
