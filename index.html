@@ -177,6 +177,13 @@
       padding: 0;
       accent-color: var(--accent);
     }
+    .rec-feedback-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
     .rating-group {
       display: flex;
       gap: 6px;
@@ -208,6 +215,21 @@
       background: rgba(245, 158, 11, 0.22);
       color: var(--super);
       border-color: rgba(245, 158, 11, 0.55);
+    }
+    .seen-btn {
+      padding: 6px 10px;
+      font-size: 0.82rem;
+      line-height: 1.2;
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+    .seen-btn.active {
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--accent-2);
+      border-color: rgba(34, 197, 94, 0.5);
     }
     .provider-grid {
       display: grid;
@@ -455,6 +477,7 @@
 
   <script>
     const STORAGE_KEY = "watchlist_kurator_items_v4";
+    const SEEN_TITLES_STORAGE = "watchlist_kurator_seen_titles_v1";
     const API_KEY_STORAGE = "watchlist_kurator_gemini_key_v1";
     const ACTIVE_PROVIDERS_STORAGE = "watchlist_kurator_active_providers_v1";
     const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
@@ -483,6 +506,11 @@
         { id: crypto.randomUUID(), title: "Tatort", provider: "ARD", status: "Läuft", rating: "Gefällt mir" }
       ];
       saveItems();
+    }
+
+    let seenTitles = JSON.parse(localStorage.getItem(SEEN_TITLES_STORAGE) || "[]");
+    if (!Array.isArray(seenTitles)) {
+      seenTitles = [];
     }
 
     let enabledProviders = JSON.parse(localStorage.getItem(ACTIVE_PROVIDERS_STORAGE) || "null");
@@ -563,6 +591,31 @@
     function saveItems() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
       watchlistCountEl.textContent = String(items.length);
+    }
+
+    function saveSeenTitles() {
+      localStorage.setItem(SEEN_TITLES_STORAGE, JSON.stringify(seenTitles));
+    }
+
+    function toggleSeenTitle(title) {
+      const clean = stripMarkdown(title);
+      if (!clean) return false;
+      const lower = clean.toLowerCase();
+      const exists = seenTitles.some((t) => String(t).toLowerCase() === lower);
+      if (exists) {
+        seenTitles = seenTitles.filter((t) => String(t).toLowerCase() !== lower);
+        saveSeenTitles();
+        return false;
+      } else {
+        seenTitles.push(clean);
+        saveSeenTitles();
+        return true;
+      }
+    }
+
+    function isTitleMarkedSeen(title) {
+      const lower = stripMarkdown(title).toLowerCase();
+      return seenTitles.some((t) => String(t).toLowerCase() === lower);
     }
 
     function saveEnabledProviders() {
@@ -764,6 +817,7 @@
           const avHint = stripMarkdown(rec.avHint || "");
           const reason = stripMarkdown(rec.reason || "");
           let chosenRating = null;
+          let isSeen = isTitleMarkedSeen(title);
 
           const card = document.createElement("div");
           card.className = "rec-card";
@@ -812,18 +866,42 @@
           const body = document.createElement("div");
           body.textContent = reason;
 
-          const rateRow = createRatingControls(chosenRating, (val) => {
-            chosenRating = chosenRating === val ? null : val;
-            const updatedRow = createRatingControls(chosenRating, (nextVal) => {
-              chosenRating = chosenRating === nextVal ? null : nextVal;
-            });
-            rateRow.replaceWith(updatedRow);
+          const feedbackRow = document.createElement("div");
+          feedbackRow.className = "rec-feedback-row";
+
+          const seenBtn = document.createElement("button");
+          seenBtn.type = "button";
+          seenBtn.className = "seen-btn" + (isSeen ? " active" : "");
+          seenBtn.textContent = "✓ Gesehen";
+          seenBtn.title = "Als bereits gesehen markieren (nicht in die Merkliste)";
+          seenBtn.setAttribute("aria-label", "Als bereits gesehen markieren");
+          seenBtn.setAttribute("aria-pressed", String(isSeen));
+          seenBtn.addEventListener("click", () => {
+            isSeen = toggleSeenTitle(title);
+            seenBtn.classList.toggle("active", isSeen);
+            seenBtn.setAttribute("aria-pressed", String(isSeen));
           });
+
+          function mountRatingControls() {
+            const group = createRatingControls(chosenRating, (val) => {
+              chosenRating = chosenRating === val ? null : val;
+              mountRatingControls();
+            });
+            const existing = feedbackRow.querySelector(".rating-group");
+            if (existing) {
+              existing.replaceWith(group);
+            } else {
+              feedbackRow.prepend(group);
+            }
+          }
+
+          mountRatingControls();
+          feedbackRow.append(seenBtn);
 
           card.append(head);
           if (metaParts.length > 0) card.append(meta);
           if (reason) card.append(body);
-          card.append(rateRow);
+          card.append(feedbackRow);
           aiRecommendations.append(card);
         }
       }
@@ -995,6 +1073,7 @@
       const titles = items
         .map((i) => i.title + " [" + (i.provider || "Sonstiges") + ", " + i.status + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
         .join(", ");
+      const seenListText = seenTitles.length > 0 ? seenTitles.join(", ") : "keine";
 
       debugLog('Starte Empfehlung | Web-Suche: ' + (searchEnabled ? "AN" : "AUS") + ' | Modus: "' + availMode + '" | Aktive Anbieter: [' + providerPool.join(", ") + '] | Stimmung: "' + mood + '"');
 
@@ -1020,6 +1099,7 @@
       const promptText = [
         "Du bist ein hilfreicher Watchlist-Kurator für Deutschland.",
         "Aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
+        "Bereits als gesehen markierte Titel (nicht erneut vorschlagen): " + seenListText + ".",
         "Bevorzuge Stil und Tonfall von Titeln mit 'Finde ich super', beziehe 'Gefällt mir' positiv ein und meide Ähnliches zu 'Nicht gefällt mir'.",
         "Wunsch/Stimmung: " + mood + ".",
         "Verfügbarkeits-Vorgabe: " + availMode + ".",
