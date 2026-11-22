@@ -163,6 +163,20 @@
       border: 1px solid rgba(56, 189, 248, 0.35);
       font-weight: 600;
     }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .check-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      accent-color: var(--accent);
+    }
     .rating-group {
       display: flex;
       gap: 6px;
@@ -343,7 +357,6 @@
   </header>
 
   <main>
-    <!-- MENÜSEITE 1: EMPFEHLUNGEN & TITEL HINZUFÜGEN -->
     <div id="discoverView" class="view active">
       <section class="card">
         <h2>KI-Empfehlung &amp; Web-Verfügbarkeit (Gemini)</h2>
@@ -356,8 +369,12 @@
           </select>
           <button id="recommendBtn" type="button">Empfehlung vorschlagen</button>
         </div>
+        <label class="check-row">
+          <input id="useSearchToggle" type="checkbox" checked />
+          <span>Google-Websuche für Verfügbarkeit nutzen (kann zusätzliches Kontingent verbrauchen)</span>
+        </label>
         <div id="activeProviderSummary" class="meta" style="margin-top: 8px;"></div>
-        <div id="aiStatus" class="status-msg">Trage unter „API &amp; Debug“ deinen Gemini API-Key ein, um Vorschläge mit Web-Verfügbarkeitscheck zu erhalten.</div>
+        <div id="aiStatus" class="status-msg">Trage unter „API &amp; Debug“ deinen Gemini API-Key ein, um Vorschläge zu erhalten.</div>
         <div id="aiRecommendations"></div>
       </section>
 
@@ -376,7 +393,6 @@
       </section>
     </div>
 
-    <!-- MENÜSEITE 2: MERKLISTE -->
     <div id="watchlistView" class="view">
       <section class="card">
         <h2>Meine Merkliste</h2>
@@ -400,7 +416,6 @@
       </section>
     </div>
 
-    <!-- MENÜSEITE 3: ANBIETER AN- & ABWÄHLEN -->
     <div id="providersView" class="view">
       <section class="card">
         <h2>Anbieter verwalten</h2>
@@ -414,7 +429,6 @@
       </section>
     </div>
 
-    <!-- MENÜSEITE 4: API-KEY & DEBUG -->
     <div id="apiView" class="view">
       <section class="card">
         <h2>Gemini API-Key</h2>
@@ -503,6 +517,7 @@
     const apiStatus = document.getElementById("apiStatus");
     const moodInput = document.getElementById("moodInput");
     const availabilityMode = document.getElementById("availabilityMode");
+    const useSearchToggle = document.getElementById("useSearchToggle");
     const recommendBtn = document.getElementById("recommendBtn");
     const aiStatus = document.getElementById("aiStatus");
     const aiRecommendations = document.getElementById("aiRecommendations");
@@ -975,12 +990,13 @@
       const key = getApiKey();
       const mood = moodInput.value.trim() || "abwechslungsreich";
       const availMode = availabilityMode.value;
+      const searchEnabled = Boolean(useSearchToggle.checked);
       const providerPool = enabledProviders.length > 0 ? enabledProviders : PROVIDERS;
       const titles = items
         .map((i) => i.title + " [" + (i.provider || "Sonstiges") + ", " + i.status + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
         .join(", ");
 
-      debugLog('Starte Empfehlung mit Web-Suche | Modus: "' + availMode + '" | Aktive Anbieter: [' + providerPool.join(", ") + '] | Stimmung: "' + mood + '"');
+      debugLog('Starte Empfehlung | Web-Suche: ' + (searchEnabled ? "AN" : "AUS") + ' | Modus: "' + availMode + '" | Aktive Anbieter: [' + providerPool.join(", ") + '] | Stimmung: "' + mood + '"');
 
       if (!key) {
         aiStatus.textContent = "Demo-Hinweis: Für die Merkliste (" + (titles || "leer") + ") wäre ein guter nächster Titel im Bereich „" + mood + "“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte unter „API & Debug“ einen Key speichern.";
@@ -988,12 +1004,18 @@
         return;
       }
 
-      aiStatus.textContent = "Suche im Web nach aktueller Verfügbarkeit & erstelle Vorschläge...";
+      aiStatus.textContent = searchEnabled
+        ? "Suche im Web nach aktueller Verfügbarkeit & erstelle Vorschläge..."
+        : "Frage Gemini an...";
       aiRecommendations.innerHTML = "";
 
       const providerHint = enabledProviders.length > 0
         ? "Nutze ausschließlich Anbieter aus dieser aktiven Auswahl: " + enabledProviders.join(", ") + "."
         : "Nutze passende Anbieter aus: " + PROVIDERS.join(", ") + ".";
+
+      const searchInstruction = searchEnabled
+        ? "Nutze die Google-Suche, um möglichst aktuell zu prüfen, ob vorgeschlagene Titel beim jeweiligen Anbieter bzw. in Mediatheken wie Netzkino, ARD, ZDF, 3sat oder Joyn tatsächlich verfügbar sind. Wenn etwas unklar ist, kennzeichne availability ehrlich als 'Verfügbarkeit prüfen'."
+        : "Gib eine realistische Einschätzung zur Verfügbarkeit an und markiere unsichere Fälle ehrlich mit 'Verfügbarkeit prüfen'.";
 
       const promptText = [
         "Du bist ein hilfreicher Watchlist-Kurator für Deutschland.",
@@ -1002,10 +1024,10 @@
         "Wunsch/Stimmung: " + mood + ".",
         "Verfügbarkeits-Vorgabe: " + availMode + ".",
         providerHint,
-        "Nutze die Google-Suche, um möglichst aktuell zu prüfen, ob vorgeschlagene Titel beim jeweiligen Anbieter bzw. in Mediatheken wie Netzkino, ARD, ZDF, 3sat oder Joyn tatsächlich verfügbar sind. Empfehle nach Möglichkeit nur Titel mit plausibler aktueller Verfügbarkeit; wenn etwas unklar ist, kennzeichne availability ehrlich als 'Verfügbarkeit prüfen'.",
+        searchInstruction,
         "Gib bei avHint eine kurze, unverbindliche Einschätzung zu Bild/Ton (z. B. 'HD / Stereo' oder 'UHD / 5.1 möglich').",
         "Antworte auf Deutsch mit 3 bis 4 konkreten Empfehlungen als reines JSON-Array (ohne einleitenden oder abschließenden Text) mit diesen Feldern:",
-        '[{"cluster":"Gruppenname z.B. Geprüft für Netzkino & Mediatheken","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Per Suche plausibel / Mediathek / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Hinweis aus der Verfügbarkeitsprüfung"}]'
+        '[{"cluster":"Gruppenname z.B. Geprüft für Netzkino & Mediatheken","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Per Suche plausibel / Mediathek / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Hinweis zur Verfügbarkeit"}]'
       ].join(" ");
 
       const apiHost = "generativelanguage.googleapis.com";
@@ -1017,21 +1039,27 @@
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-        debugLog("POST " + endpoint + " mit google_search (Modell: " + model + ")");
+        const requestBody = {
+          contents: [{
+            parts: [{ text: promptText }]
+          }]
+        };
+        if (searchEnabled) {
+          requestBody.tools = [{ google_search: {} }];
+        } else {
+          requestBody.generationConfig = {
+            thinkingConfig: { thinkingBudget: 0 }
+          };
+        }
+
+        debugLog("POST " + endpoint + " | Web-Suche: " + (searchEnabled ? "ja" : "nein") + " (Modell: " + model + ")");
 
         try {
           const res = await fetch(requestUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             signal: controller.signal,
-            body: JSON.stringify({
-              contents: [{
-                parts: [{ text: promptText }]
-              }],
-              tools: [{
-                google_search: {}
-              }]
-            })
+            body: JSON.stringify(requestBody)
           });
           const rawBody = await res.text();
           debugLog("Antwort von " + model + ": HTTP " + res.status + ", Länge: " + rawBody.length + " Zeichen");
@@ -1041,10 +1069,12 @@
           }
           const candidate = data?.candidates?.[0];
           const searchQueries = candidate?.groundingMetadata?.webSearchQueries || [];
-          if (searchQueries.length > 0) {
-            debugLog("Google-Suche genutzt: " + searchQueries.join(" | "));
-          } else {
-            debugLog("Hinweis: Keine webSearchQueries in groundingMetadata gemeldet.");
+          if (searchEnabled) {
+            if (searchQueries.length > 0) {
+              debugLog("Google-Suche genutzt: " + searchQueries.join(" | "));
+            } else {
+              debugLog("Hinweis: Keine webSearchQueries in groundingMetadata gemeldet.");
+            }
           }
           const parts = candidate?.content?.parts || [];
           const rawText = parts.map((p) => p.text || "").join("\n").trim();
@@ -1052,7 +1082,7 @@
           try {
             const parsedRecs = parseRecommendationsJson(rawText);
             if (parsedRecs) {
-              aiStatus.textContent = "Vorschläge mit Web-Verfügbarkeitsprüfung (Modell: " + model + "):";
+              aiStatus.textContent = "Vorschläge erstellt (Modell: " + model + (searchEnabled ? ", mit Web-Suche" : "") + "):";
               renderRecommendations(parsedRecs);
               debugLog("JSON erfolgreich geparst (" + parsedRecs.length + " Einträge).");
             } else {
@@ -1068,8 +1098,8 @@
         } catch (err) {
           lastError = err;
           debugLog("Fehler bei " + model + ": " + err.name + ": " + err.message);
-          const isOverloaded = /high demand|overloaded|503|429|UNAVAILABLE/i.test(err.message || "");
-          if (!isOverloaded && err.name !== "AbortError") {
+          const isFallbackWorthwhile = /high demand|overloaded|503|429|UNAVAILABLE|quota|exceeded/i.test(err.message || "");
+          if (!isFallbackWorthwhile && err.name !== "AbortError") {
             clearTimeout(timeoutId);
             aiStatus.textContent = "Fehler bei der Gemini-Anfrage: " + err.message;
             return;
@@ -1082,7 +1112,7 @@
       if (lastError?.name === "AbortError") {
         aiStatus.textContent = "Zeitüberschreitung: Gemini hat nach 30 Sekunden nicht geantwortet.";
       } else {
-        aiStatus.textContent = "Fehler bei der Gemini-Anfrage: " + (lastError?.message || "Alle Modelle aktuell ausgelastet.");
+        aiStatus.textContent = "Fehler bei der Gemini-Anfrage: " + (lastError?.message || "Alle Modelle aktuell ausgelastet oder Kontingent erschöpft.");
       }
     });
 
@@ -1090,7 +1120,7 @@
     syncProviderSelects();
     renderProviderToggles();
     renderList();
-    debugLog("Watchlist-Kurator mit Google-Search-Verfügbarkeitscheck initialisiert.");
+    debugLog("Watchlist-Kurator initialisiert.");
   </script>
 </body>
 </html>
