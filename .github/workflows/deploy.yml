@@ -27,6 +27,8 @@ jobs:
 
       - name: Prepare build with cache-busting build tag
         id: build_meta
+        env:
+          BUILD_ID: "${{ github.sha }}"
         run: |
           mkdir -p dist
           cp index.html styles.css app.js dist/
@@ -34,13 +36,32 @@ jobs:
             cp gemini.js dist/
           fi
 
-          BUILD_ID="${GITHUB_SHA::7}-$(date -u +%Y%m%d%H%M)"
-          BUILD_LABEL="Build ${GITHUB_SHA::7} · $(date -u +'%Y-%m-%d %H:%M UTC')"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          STAMP="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          TAG_ID="${SHORT_SHA}-$(date -u +%Y%m%d%H%M)"
+          TAG_LABEL="v1.5.0 (${SHORT_SHA}, ${STAMP})"
 
-          sed -i "s/?v=[^\"']*/?v=${BUILD_ID}/g" dist/index.html
-          sed -i -E "s|const APP_VERSION = [^;]+;|const APP_VERSION = \"${BUILD_LABEL}\";|" dist/app.js
+          TAG_ID="$TAG_ID" TAG_LABEL="$TAG_LABEL" node -e '
+            const fs = require("fs");
+            const tagId = process.env.TAG_ID;
+            const tagLabel = process.env.TAG_LABEL;
 
-          echo "build_label=${BUILD_LABEL}" >> "$GITHUB_OUTPUT"
+            let html = fs.readFileSync("dist/index.html", "utf8");
+            html = html.replace(/\?v=[^"'\'']*/g, "?v=" + tagId);
+            fs.writeFileSync("dist/index.html", html, "utf8");
+
+            let appJs = fs.readFileSync("dist/app.js", "utf8");
+            const updated = appJs.replace(
+              /const\s+APP_VERSION\s*=\s*["'\''][^"'\'']*["'\'']\s*;/,
+              `const APP_VERSION = "${tagLabel}";`
+            );
+            if (updated === appJs) {
+              throw new Error("APP_VERSION Platzhalter in dist/app.js nicht gefunden!");
+            }
+            fs.writeFileSync("dist/app.js", updated, "utf8");
+          '
+
+          echo "Gesetzte Version: ${TAG_LABEL}"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
