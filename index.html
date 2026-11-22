@@ -346,7 +346,7 @@
     <!-- MENÜSEITE 1: EMPFEHLUNGEN & TITEL HINZUFÜGEN -->
     <div id="discoverView" class="view active">
       <section class="card">
-        <h2>KI-Empfehlung &amp; Verfügbarkeit (Gemini)</h2>
+        <h2>KI-Empfehlung &amp; Web-Verfügbarkeit (Gemini)</h2>
         <div class="row ai-top">
           <input id="moodInput" type="text" placeholder="Stimmung / Genre (z. B. Thriller, Sci-Fi, Doku)" />
           <select id="availabilityMode" aria-label="Verfügbarkeits-Fokus">
@@ -357,7 +357,7 @@
           <button id="recommendBtn" type="button">Empfehlung vorschlagen</button>
         </div>
         <div id="activeProviderSummary" class="meta" style="margin-top: 8px;"></div>
-        <div id="aiStatus" class="status-msg">Trage unter „API &amp; Debug“ deinen Gemini API-Key ein, um personalisierte Vorschläge zu erhalten.</div>
+        <div id="aiStatus" class="status-msg">Trage unter „API &amp; Debug“ deinen Gemini API-Key ein, um Vorschläge mit Web-Verfügbarkeitscheck zu erhalten.</div>
         <div id="aiRecommendations"></div>
       </section>
 
@@ -814,12 +814,22 @@
       }
     }
 
-    function parseRecommendationsJson(rawText) {
-      const cleaned = String(rawText)
+    function extractJsonArrayText(rawText) {
+      let cleaned = String(rawText)
         .replace(/^```json\s*/i, "")
         .replace(/^```\s*/i, "")
         .replace(/\s*```$/i, "")
         .trim();
+      const firstBracket = cleaned.indexOf("[");
+      const lastBracket = cleaned.lastIndexOf("]");
+      if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+        cleaned = cleaned.slice(firstBracket, lastBracket + 1);
+      }
+      return cleaned;
+    }
+
+    function parseRecommendationsJson(rawText) {
+      const cleaned = extractJsonArrayText(rawText);
       const parsed = JSON.parse(cleaned);
       if (Array.isArray(parsed)) return parsed;
       if (Array.isArray(parsed?.recommendations)) return parsed.recommendations;
@@ -970,7 +980,7 @@
         .map((i) => i.title + " [" + (i.provider || "Sonstiges") + ", " + i.status + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
         .join(", ");
 
-      debugLog('Starte Empfehlung | Modus: "' + availMode + '" | Aktive Anbieter: [' + providerPool.join(", ") + '] | Stimmung: "' + mood + '"');
+      debugLog('Starte Empfehlung mit Web-Suche | Modus: "' + availMode + '" | Aktive Anbieter: [' + providerPool.join(", ") + '] | Stimmung: "' + mood + '"');
 
       if (!key) {
         aiStatus.textContent = "Demo-Hinweis: Für die Merkliste (" + (titles || "leer") + ") wäre ein guter nächster Titel im Bereich „" + mood + "“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte unter „API & Debug“ einen Key speichern.";
@@ -978,7 +988,7 @@
         return;
       }
 
-      aiStatus.textContent = "Frage Gemini an & prüfe Verfügbarkeitsangaben...";
+      aiStatus.textContent = "Suche im Web nach aktueller Verfügbarkeit & erstelle Vorschläge...";
       aiRecommendations.innerHTML = "";
 
       const providerHint = enabledProviders.length > 0
@@ -992,9 +1002,10 @@
         "Wunsch/Stimmung: " + mood + ".",
         "Verfügbarkeits-Vorgabe: " + availMode + ".",
         providerHint,
-        "Achte besonders auf realistische Verfügbarkeit in deutschen Mediatheken (ARD, ZDF, Tresat/3sat, Joyn, Netzkino) oder Streaming-Diensten (ohne Live-Abruf-Garantie – markiere unsichere Fälle ehrlich mit 'Verfügbarkeit prüfen'). Gib bei avHint eine kurze, unverbindliche Einschätzung zu Bild/Ton (z. B. 'UHD/5.1 möglich' oder 'HD/Stereo typisch').",
-        "Gib auf Deutsch 3 bis 4 konkrete Empfehlungen als reines JSON-Array (ohne Markdown-Codeblöcke) mit diesen Feldern:",
-        '[{"cluster":"Gruppenname z.B. In Mediatheken & Streaming","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Mediathek / Abo / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Verfügbarkeitshinweis"}]'
+        "Nutze die Google-Suche, um möglichst aktuell zu prüfen, ob vorgeschlagene Titel beim jeweiligen Anbieter bzw. in Mediatheken wie Netzkino, ARD, ZDF, 3sat oder Joyn tatsächlich verfügbar sind. Empfehle nach Möglichkeit nur Titel mit plausibler aktueller Verfügbarkeit; wenn etwas unklar ist, kennzeichne availability ehrlich als 'Verfügbarkeit prüfen'.",
+        "Gib bei avHint eine kurze, unverbindliche Einschätzung zu Bild/Ton (z. B. 'HD / Stereo' oder 'UHD / 5.1 möglich').",
+        "Antworte auf Deutsch mit 3 bis 4 konkreten Empfehlungen als reines JSON-Array (ohne einleitenden oder abschließenden Text) mit diesen Feldern:",
+        '[{"cluster":"Gruppenname z.B. Geprüft für Netzkino & Mediatheken","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Per Suche plausibel / Mediathek / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Hinweis aus der Verfügbarkeitsprüfung"}]'
       ].join(" ");
 
       const apiHost = "generativelanguage.googleapis.com";
@@ -1006,7 +1017,7 @@
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-        debugLog("POST " + endpoint + " (Modell: " + model + ")");
+        debugLog("POST " + endpoint + " mit google_search (Modell: " + model + ")");
 
         try {
           const res = await fetch(requestUrl, {
@@ -1017,25 +1028,31 @@
               contents: [{
                 parts: [{ text: promptText }]
               }],
-              generationConfig: {
-                thinkingConfig: {
-                  thinkingBudget: 0
-                }
-              }
+              tools: [{
+                google_search: {}
+              }]
             })
           });
           const rawBody = await res.text();
-          debugLog("Antwort von " + model + ": HTTP " + res.status + ", Final-URL: " + res.url + ", Länge: " + rawBody.length + " Zeichen");
+          debugLog("Antwort von " + model + ": HTTP " + res.status + ", Länge: " + rawBody.length + " Zeichen");
           const data = parseApiResponseText(rawBody, res.status);
           if (!res.ok) {
             throw new Error(data?.error?.message || ("HTTP " + res.status));
           }
-          const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const candidate = data?.candidates?.[0];
+          const searchQueries = candidate?.groundingMetadata?.webSearchQueries || [];
+          if (searchQueries.length > 0) {
+            debugLog("Google-Suche genutzt: " + searchQueries.join(" | "));
+          } else {
+            debugLog("Hinweis: Keine webSearchQueries in groundingMetadata gemeldet.");
+          }
+          const parts = candidate?.content?.parts || [];
+          const rawText = parts.map((p) => p.text || "").join("\n").trim();
           debugLog("Kandidatentext erhalten (" + rawText.length + " Zeichen).");
           try {
             const parsedRecs = parseRecommendationsJson(rawText);
             if (parsedRecs) {
-              aiStatus.textContent = "Vorschläge mit Verfügbarkeitshinweisen (Modell: " + model + "):";
+              aiStatus.textContent = "Vorschläge mit Web-Verfügbarkeitsprüfung (Modell: " + model + "):";
               renderRecommendations(parsedRecs);
               debugLog("JSON erfolgreich geparst (" + parsedRecs.length + " Einträge).");
             } else {
@@ -1073,7 +1090,7 @@
     syncProviderSelects();
     renderProviderToggles();
     renderList();
-    debugLog("Watchlist-Kurator mit Menüstruktur initialisiert.");
+    debugLog("Watchlist-Kurator mit Google-Search-Verfügbarkeitscheck initialisiert.");
   </script>
 </body>
 </html>
