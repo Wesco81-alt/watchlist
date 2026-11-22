@@ -29,11 +29,13 @@
     header {
       position: sticky;
       top: 0;
-      z-index: 10;
-      background: rgba(15, 23, 42, 0.92);
+      z-index: 20;
+      background: rgba(15, 23, 42, 0.94);
       backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--border);
-      padding: 14px 16px;
+    }
+    .header-top {
+      padding: 12px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -53,12 +55,43 @@
       color: var(--accent-2);
       border-color: rgba(34, 197, 94, 0.4);
     }
+    nav.menu-bar {
+      display: flex;
+      gap: 6px;
+      padding: 0 12px 10px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    nav.menu-bar::-webkit-scrollbar { display: none; }
+    .nav-btn {
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 7px 13px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .nav-btn.active {
+      background: var(--accent);
+      color: #06202e;
+      border-color: var(--accent);
+    }
     main {
       max-width: 820px;
       margin: 0 auto;
       padding: 16px;
       display: grid;
       gap: 16px;
+    }
+    .view {
+      display: none;
+      gap: 16px;
+    }
+    .view.active {
+      display: grid;
     }
     .card {
       background: var(--panel);
@@ -162,6 +195,41 @@
       color: var(--super);
       border-color: rgba(245, 158, 11, 0.55);
     }
+    .provider-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .provider-toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-weight: 600;
+      text-align: left;
+    }
+    .provider-toggle.enabled {
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.45);
+      color: var(--text);
+    }
+    .toggle-state {
+      font-size: 0.75rem;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--muted);
+    }
+    .provider-toggle.enabled .toggle-state {
+      background: rgba(34, 197, 94, 0.22);
+      color: var(--accent-2);
+    }
     .list {
       display: grid;
       gap: 10px;
@@ -262,111 +330,119 @@
 </head>
 <body>
   <header>
-    <h1>Watchlist-Kurator</h1>
-    <span id="apiStatus" class="badge">Demo-Modus</span>
+    <div class="header-top">
+      <h1>Watchlist-Kurator</h1>
+      <span id="apiStatus" class="badge">Demo-Modus</span>
+    </div>
+    <nav class="menu-bar" aria-label="Hauptmenü">
+      <button type="button" class="nav-btn active" data-view="discoverView">Empfehlungen &amp; Neu</button>
+      <button type="button" class="nav-btn" data-view="watchlistView">Merkliste (<span id="watchlistCount">0</span>)</button>
+      <button type="button" class="nav-btn" data-view="providersView">Anbieter (<span id="activeProvidersCount">0</span>)</button>
+      <button type="button" class="nav-btn" data-view="apiView">API &amp; Debug</button>
+    </nav>
   </header>
 
   <main>
-    <section class="card">
-      <h2>Titel zur Merkliste hinzufügen</h2>
-      <form id="addForm" class="row add">
-        <input id="titleInput" type="text" placeholder="Film, Serie oder Doku eingeben..." required />
-        <select id="providerInput" aria-label="Anbieter">
-          <option value="Sky">Sky</option>
-          <option value="Netflix">Netflix</option>
-          <option value="ARD">ARD</option>
-          <option value="ZDF">ZDF</option>
-          <option value="Tresat">Tresat</option>
-          <option value="Joyn">Joyn</option>
-          <option value="Netzkino">Netzkino</option>
-          <option value="Prime Video">Prime Video</option>
-          <option value="HBO Max">HBO Max</option>
-          <option value="Apple TV">Apple TV</option>
-          <option value="Rakuten TV">Rakuten TV</option>
-          <option value="Sonstiges">Sonstiges</option>
-        </select>
-        <select id="statusInput" aria-label="Status">
-          <option value="Geplant">Geplant</option>
-          <option value="Läuft">Läuft</option>
-          <option value="Gesehen">Gesehen</option>
-        </select>
-        <button type="submit">Hinzufügen</button>
-      </form>
-
-      <div class="row filters" style="margin-top: 12px;">
-        <select id="providerFilter" aria-label="Nach Anbieter filtern">
-          <option value="Alle">Alle Anbieter</option>
-          <option value="Sky">Sky</option>
-          <option value="Netflix">Netflix</option>
-          <option value="ARD">ARD</option>
-          <option value="ZDF">ZDF</option>
-          <option value="Tresat">Tresat</option>
-          <option value="Joyn">Joyn</option>
-          <option value="Netzkino">Netzkino</option>
-          <option value="Prime Video">Prime Video</option>
-          <option value="HBO Max">HBO Max</option>
-          <option value="Apple TV">Apple TV</option>
-          <option value="Rakuten TV">Rakuten TV</option>
-          <option value="Sonstiges">Sonstiges</option>
-        </select>
-        <select id="statusFilter" aria-label="Nach Status filtern">
-          <option value="Alle">Alle Status</option>
-          <option value="Geplant">Geplant</option>
-          <option value="Läuft">Läuft</option>
-          <option value="Gesehen">Gesehen</option>
-        </select>
-        <select id="ratingFilter" aria-label="Nach Bewertung filtern">
-          <option value="Alle">Alle Bewertungen</option>
-          <option value="Finde ich super">👍👍 Finde ich super</option>
-          <option value="Gefällt mir">👍 Gefällt mir</option>
-          <option value="Nicht gefällt mir">👎 Nicht gefällt mir</option>
-          <option value="Ohne Bewertung">Ohne Bewertung</option>
-        </select>
-      </div>
-
-      <div class="list" id="watchlistContainer"></div>
-    </section>
-
-    <section class="card">
-      <h2>KI-Empfehlung &amp; Verfügbarkeit (Gemini)</h2>
-      <div class="row ai-top">
-        <input id="moodInput" type="text" placeholder="Stimmung / Genre (z. B. Thriller, Sci-Fi, Doku)" />
-        <select id="availabilityMode" aria-label="Verfügbarkeits-Fokus">
-          <option value="Abo & Mediathek bevorzugt">Abo &amp; Mediathek bevorzugt</option>
-          <option value="Mediatheken / Free (ARD, ZDF, Tresat, Joyn, Netzkino)">Mediatheken / Free bevorzugt</option>
-          <option value="Alle Optionen inkl. Leihe/Kauf">Alle Optionen inkl. Leihe/Kauf</option>
-        </select>
-        <button id="recommendBtn" type="button">Empfehlung vorschlagen</button>
-      </div>
-      <div id="aiStatus" class="status-msg">Trage unten deinen Gemini API-Key ein, um personalisierte Vorschläge zu erhalten.</div>
-      <div id="aiRecommendations"></div>
-    </section>
-
-    <section class="card">
-      <h2>Daten &amp; API</h2>
-      <div class="row two">
-        <input id="apiKeyInput" type="password" placeholder="Gemini API-Key (lokal gespeichert)" autocomplete="off" />
-        <div class="actions">
-          <button id="saveKeyBtn" type="button">Key speichern</button>
-          <button id="clearKeyBtn" type="button" class="secondary">Key löschen</button>
+    <!-- MENÜSEITE 1: EMPFEHLUNGEN & TITEL HINZUFÜGEN -->
+    <div id="discoverView" class="view active">
+      <section class="card">
+        <h2>KI-Empfehlung &amp; Verfügbarkeit (Gemini)</h2>
+        <div class="row ai-top">
+          <input id="moodInput" type="text" placeholder="Stimmung / Genre (z. B. Thriller, Sci-Fi, Doku)" />
+          <select id="availabilityMode" aria-label="Verfügbarkeits-Fokus">
+            <option value="Abo & Mediathek bevorzugt">Abo &amp; Mediathek bevorzugt</option>
+            <option value="Mediatheken / Free (ARD, ZDF, Tresat, Joyn, Netzkino)">Mediatheken / Free bevorzugt</option>
+            <option value="Alle Optionen inkl. Leihe/Kauf">Alle Optionen inkl. Leihe/Kauf</option>
+          </select>
+          <button id="recommendBtn" type="button">Empfehlung vorschlagen</button>
         </div>
-      </div>
-      <div id="keyHint" class="status-msg">Der API-Key wird ausschließlich im lokalen Speicher (localStorage) deines Browsers abgelegt.</div>
-    </section>
+        <div id="activeProviderSummary" class="meta" style="margin-top: 8px;"></div>
+        <div id="aiStatus" class="status-msg">Trage unter „API &amp; Debug“ deinen Gemini API-Key ein, um personalisierte Vorschläge zu erhalten.</div>
+        <div id="aiRecommendations"></div>
+      </section>
 
-    <section class="card">
-      <h2>Debug-Protokoll</h2>
-      <div class="actions">
-        <button id="copyDebugBtn" type="button" class="secondary">Log kopieren</button>
-        <button id="clearDebugBtn" type="button" class="secondary">Log leeren</button>
-      </div>
-      <div id="debugOutput" class="debug-box">Bereit – noch keine Anfrage protokolliert.</div>
-    </section>
+      <section class="card">
+        <h2>Titel direkt zur Merkliste hinzufügen</h2>
+        <form id="addForm" class="row add">
+          <input id="titleInput" type="text" placeholder="Film, Serie oder Doku eingeben..." required />
+          <select id="providerInput" aria-label="Anbieter"></select>
+          <select id="statusInput" aria-label="Status">
+            <option value="Geplant">Geplant</option>
+            <option value="Läuft">Läuft</option>
+            <option value="Gesehen">Gesehen</option>
+          </select>
+          <button type="submit">Hinzufügen</button>
+        </form>
+      </section>
+    </div>
+
+    <!-- MENÜSEITE 2: MERKLISTE -->
+    <div id="watchlistView" class="view">
+      <section class="card">
+        <h2>Meine Merkliste</h2>
+        <div class="row filters">
+          <select id="providerFilter" aria-label="Nach Anbieter filtern"></select>
+          <select id="statusFilter" aria-label="Nach Status filtern">
+            <option value="Alle">Alle Status</option>
+            <option value="Geplant">Geplant</option>
+            <option value="Läuft">Läuft</option>
+            <option value="Gesehen">Gesehen</option>
+          </select>
+          <select id="ratingFilter" aria-label="Nach Bewertung filtern">
+            <option value="Alle">Alle Bewertungen</option>
+            <option value="Finde ich super">👍👍 Finde ich super</option>
+            <option value="Gefällt mir">👍 Gefällt mir</option>
+            <option value="Nicht gefällt mir">👎 Nicht gefällt mir</option>
+            <option value="Ohne Bewertung">Ohne Bewertung</option>
+          </select>
+        </div>
+        <div class="list" id="watchlistContainer"></div>
+      </section>
+    </div>
+
+    <!-- MENÜSEITE 3: ANBIETER AN- & ABWÄHLEN -->
+    <div id="providersView" class="view">
+      <section class="card">
+        <h2>Anbieter verwalten</h2>
+        <div class="meta">Wähle aus, welche Anbieter für dich relevant sind. Aktive Anbieter werden für KI-Empfehlungen und neue Einträge genutzt.</div>
+        <div class="actions" style="margin-top: 12px;">
+          <button id="selectAllProvidersBtn" type="button" class="secondary">Alle auswählen</button>
+          <button id="selectMediathekenBtn" type="button" class="secondary">Nur Mediatheken / Free</button>
+          <button id="clearProvidersBtn" type="button" class="secondary">Alle abwählen</button>
+        </div>
+        <div id="providerToggleGrid" class="provider-grid"></div>
+      </section>
+    </div>
+
+    <!-- MENÜSEITE 4: API-KEY & DEBUG -->
+    <div id="apiView" class="view">
+      <section class="card">
+        <h2>Gemini API-Key</h2>
+        <div class="row two">
+          <input id="apiKeyInput" type="password" placeholder="Gemini API-Key (lokal gespeichert)" autocomplete="off" />
+          <div class="actions">
+            <button id="saveKeyBtn" type="button">Key speichern</button>
+            <button id="clearKeyBtn" type="button" class="secondary">Key löschen</button>
+          </div>
+        </div>
+        <div id="keyHint" class="status-msg">Der API-Key wird ausschließlich im lokalen Speicher (localStorage) deines Browsers abgelegt.</div>
+      </section>
+
+      <section class="card">
+        <h2>Debug-Protokoll</h2>
+        <div class="actions">
+          <button id="copyDebugBtn" type="button" class="secondary">Log kopieren</button>
+          <button id="clearDebugBtn" type="button" class="secondary">Log leeren</button>
+        </div>
+        <div id="debugOutput" class="debug-box">Bereit – noch keine Anfrage protokolliert.</div>
+      </section>
+    </div>
   </main>
 
   <script>
     const STORAGE_KEY = "watchlist_kurator_items_v4";
     const API_KEY_STORAGE = "watchlist_kurator_gemini_key_v1";
+    const ACTIVE_PROVIDERS_STORAGE = "watchlist_kurator_active_providers_v1";
     const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
     const PROVIDERS = [
       "Sky",
@@ -382,6 +458,7 @@
       "Rakuten TV",
       "Sonstiges"
     ];
+    const MEDIATHEK_FREE_PROVIDERS = ["ARD", "ZDF", "Tresat", "Joyn", "Netzkino"];
     const STATUSES = ["Geplant", "Läuft", "Gesehen"];
     const RATINGS = ["Nicht gefällt mir", "Gefällt mir", "Finde ich super"];
 
@@ -393,6 +470,24 @@
       ];
       saveItems();
     }
+
+    let enabledProviders = JSON.parse(localStorage.getItem(ACTIVE_PROVIDERS_STORAGE) || "null");
+    if (!Array.isArray(enabledProviders)) {
+      enabledProviders = [...PROVIDERS];
+      saveEnabledProviders();
+    } else {
+      enabledProviders = enabledProviders.filter((p) => PROVIDERS.includes(p));
+    }
+
+    const navButtons = Array.from(document.querySelectorAll(".nav-btn"));
+    const views = Array.from(document.querySelectorAll(".view"));
+    const watchlistCountEl = document.getElementById("watchlistCount");
+    const activeProvidersCountEl = document.getElementById("activeProvidersCount");
+    const activeProviderSummaryEl = document.getElementById("activeProviderSummary");
+    const providerToggleGrid = document.getElementById("providerToggleGrid");
+    const selectAllProvidersBtn = document.getElementById("selectAllProvidersBtn");
+    const selectMediathekenBtn = document.getElementById("selectMediathekenBtn");
+    const clearProvidersBtn = document.getElementById("clearProvidersBtn");
 
     const watchlistContainer = document.getElementById("watchlistContainer");
     const addForm = document.getElementById("addForm");
@@ -416,6 +511,16 @@
     const clearDebugBtn = document.getElementById("clearDebugBtn");
 
     let debugLines = [];
+
+    function switchView(viewId) {
+      views.forEach((v) => v.classList.toggle("active", v.id === viewId));
+      navButtons.forEach((b) => b.classList.toggle("active", b.dataset.view === viewId));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    navButtons.forEach((btn) => {
+      btn.addEventListener("click", () => switchView(btn.dataset.view));
+    });
 
     function debugLog(message) {
       const now = new Date().toISOString().slice(11, 23);
@@ -442,7 +547,83 @@
 
     function saveItems() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      watchlistCountEl.textContent = String(items.length);
     }
+
+    function saveEnabledProviders() {
+      localStorage.setItem(ACTIVE_PROVIDERS_STORAGE, JSON.stringify(enabledProviders));
+      syncProviderSelects();
+      renderProviderToggles();
+    }
+
+    function syncProviderSelects() {
+      const previousInputValue = providerInput.value;
+      const previousFilterValue = providerFilter.value;
+
+      const selectableForAdd = enabledProviders.length > 0 ? enabledProviders : PROVIDERS;
+      providerInput.innerHTML = selectableForAdd
+        .map((p) => '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + "</option>")
+        .join("");
+      if (selectableForAdd.includes(previousInputValue)) {
+        providerInput.value = previousInputValue;
+      }
+
+      providerFilter.innerHTML =
+        '<option value="Alle">Alle Anbieter</option>' +
+        PROVIDERS.map((p) => '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + "</option>").join("");
+      if (["Alle", ...PROVIDERS].includes(previousFilterValue)) {
+        providerFilter.value = previousFilterValue;
+      }
+
+      activeProvidersCountEl.textContent = String(enabledProviders.length);
+      if (enabledProviders.length === 0) {
+        activeProviderSummaryEl.textContent = "Aktive Anbieter: Keine ausgewählt (bitte unter „Anbieter“ wählen).";
+      } else if (enabledProviders.length === PROVIDERS.length) {
+        activeProviderSummaryEl.textContent = "Aktive Anbieter: Alle (" + PROVIDERS.length + ")";
+      } else {
+        activeProviderSummaryEl.textContent = "Aktive Anbieter: " + enabledProviders.join(", ");
+      }
+    }
+
+    function toggleProvider(provider) {
+      if (enabledProviders.includes(provider)) {
+        enabledProviders = enabledProviders.filter((p) => p !== provider);
+      } else {
+        enabledProviders.push(provider);
+      }
+      saveEnabledProviders();
+    }
+
+    function renderProviderToggles() {
+      providerToggleGrid.innerHTML = "";
+      PROVIDERS.forEach((provider) => {
+        const isEnabled = enabledProviders.includes(provider);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "provider-toggle" + (isEnabled ? " enabled" : "");
+        btn.setAttribute("aria-pressed", String(isEnabled));
+        btn.innerHTML =
+          "<span>" + escapeHtml(provider) + "</span>" +
+          '<span class="toggle-state">' + (isEnabled ? "Aktiv" : "Aus") + "</span>";
+        btn.addEventListener("click", () => toggleProvider(provider));
+        providerToggleGrid.append(btn);
+      });
+    }
+
+    selectAllProvidersBtn.addEventListener("click", () => {
+      enabledProviders = [...PROVIDERS];
+      saveEnabledProviders();
+    });
+
+    selectMediathekenBtn.addEventListener("click", () => {
+      enabledProviders = [...MEDIATHEK_FREE_PROVIDERS];
+      saveEnabledProviders();
+    });
+
+    clearProvidersBtn.addEventListener("click", () => {
+      enabledProviders = [];
+      saveEnabledProviders();
+    });
 
     function getApiKey() {
       return (localStorage.getItem(API_KEY_STORAGE) || "").trim();
@@ -564,7 +745,8 @@
           const year = rec.year ? " (" + escapeHtml(rec.year) + ")" : "";
           const provider = normalizeProvider(rec.provider);
           const availability = stripMarkdown(rec.availability || "Verfügbarkeit prüfen");
-          const runtime = rec.runtime ? escapeHtml(rec.runtime) : "";
+          const runtime = rec.runtime ? stripMarkdown(rec.runtime) : "";
+          const avHint = stripMarkdown(rec.avHint || "");
           const reason = stripMarkdown(rec.reason || "");
           let chosenRating = null;
 
@@ -604,9 +786,13 @@
           rightActions.append(checkLink, addBtn);
           head.append(titleWrap, rightActions);
 
+          const metaParts = [];
+          if (runtime) metaParts.push("Laufzeit: " + runtime);
+          if (avHint) metaParts.push("Bild/Ton (ca.): " + avHint);
+
           const meta = document.createElement("div");
           meta.className = "meta";
-          meta.textContent = runtime ? "Laufzeit: " + runtime : "";
+          meta.textContent = metaParts.join(" · ");
 
           const body = document.createElement("div");
           body.textContent = reason;
@@ -620,7 +806,7 @@
           });
 
           card.append(head);
-          if (runtime) card.append(meta);
+          if (metaParts.length > 0) card.append(meta);
           if (reason) card.append(body);
           card.append(rateRow);
           aiRecommendations.append(card);
@@ -658,6 +844,7 @@
     }
 
     function renderList() {
+      watchlistCountEl.textContent = String(items.length);
       const selectedProvider = providerFilter.value;
       const selectedStatus = statusFilter.value;
       const selectedRating = ratingFilter.value;
@@ -778,15 +965,15 @@
       const key = getApiKey();
       const mood = moodInput.value.trim() || "abwechslungsreich";
       const availMode = availabilityMode.value;
-      const activeProviderFilter = providerFilter.value;
+      const providerPool = enabledProviders.length > 0 ? enabledProviders : PROVIDERS;
       const titles = items
         .map((i) => i.title + " [" + (i.provider || "Sonstiges") + ", " + i.status + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
         .join(", ");
 
-      debugLog('Starte Empfehlung | Modus: "' + availMode + '" | Anbieter-Filter: "' + activeProviderFilter + '" | Stimmung: "' + mood + '"');
+      debugLog('Starte Empfehlung | Modus: "' + availMode + '" | Aktive Anbieter: [' + providerPool.join(", ") + '] | Stimmung: "' + mood + '"');
 
       if (!key) {
-        aiStatus.textContent = "Demo-Hinweis: Für die Merkliste (" + (titles || "leer") + ") wäre ein guter nächster Titel im Bereich „" + mood + "“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte oben unter „Daten & API“ einen Key speichern.";
+        aiStatus.textContent = "Demo-Hinweis: Für die Merkliste (" + (titles || "leer") + ") wäre ein guter nächster Titel im Bereich „" + mood + "“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte unter „API & Debug“ einen Key speichern.";
         debugLog("Kein API-Key vorhanden -> Demo-Ausgabe.");
         return;
       }
@@ -794,9 +981,9 @@
       aiStatus.textContent = "Frage Gemini an & prüfe Verfügbarkeitsangaben...";
       aiRecommendations.innerHTML = "";
 
-      const providerHint = activeProviderFilter !== "Alle"
-        ? "Bevorzuge stark den gewählten Anbieter '" + activeProviderFilter + "'."
-        : "Nutze passende Anbieter aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges.";
+      const providerHint = enabledProviders.length > 0
+        ? "Nutze ausschließlich Anbieter aus dieser aktiven Auswahl: " + enabledProviders.join(", ") + "."
+        : "Nutze passende Anbieter aus: " + PROVIDERS.join(", ") + ".";
 
       const promptText = [
         "Du bist ein hilfreicher Watchlist-Kurator für Deutschland.",
@@ -805,9 +992,9 @@
         "Wunsch/Stimmung: " + mood + ".",
         "Verfügbarkeits-Vorgabe: " + availMode + ".",
         providerHint,
-        "Achte besonders auf realistische Verfügbarkeit in deutschen Mediatheken (ARD, ZDF, Tresat/3sat, Joyn, Netzkino) oder Streaming-Diensten (ohne Live-Abruf-Garantie – markiere unsichere Fälle ehrlich mit 'Verfügbarkeit prüfen').",
+        "Achte besonders auf realistische Verfügbarkeit in deutschen Mediatheken (ARD, ZDF, Tresat/3sat, Joyn, Netzkino) oder Streaming-Diensten (ohne Live-Abruf-Garantie – markiere unsichere Fälle ehrlich mit 'Verfügbarkeit prüfen'). Gib bei avHint eine kurze, unverbindliche Einschätzung zu Bild/Ton (z. B. 'UHD/5.1 möglich' oder 'HD/Stereo typisch').",
         "Gib auf Deutsch 3 bis 4 konkrete Empfehlungen als reines JSON-Array (ohne Markdown-Codeblöcke) mit diesen Feldern:",
-        '[{"cluster":"Gruppenname z.B. In Mediatheken & Streaming","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Mediathek / Abo / Verfügbarkeit prüfen","reason":"1 kurzer Satz Begründung inkl. Verfügbarkeitshinweis"}]'
+        '[{"cluster":"Gruppenname z.B. In Mediatheken & Streaming","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Mediathek / Abo / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Verfügbarkeitshinweis"}]'
       ].join(" ");
 
       const apiHost = "generativelanguage.googleapis.com";
@@ -883,8 +1070,10 @@
     });
 
     updateApiBadge();
+    syncProviderSelects();
+    renderProviderToggles();
     renderList();
-    debugLog("Watchlist-Kurator initialisiert.");
+    debugLog("Watchlist-Kurator mit Menüstruktur initialisiert.");
   </script>
 </body>
 </html>
