@@ -1031,9 +1031,12 @@
       ].join(" ");
 
       const apiHost = "generativelanguage.googleapis.com";
+      const attemptedModels = [];
       let lastError = null;
 
-      for (const model of GEMINI_MODELS) {
+      for (let idx = 0; idx < GEMINI_MODELS.length; idx++) {
+        const model = GEMINI_MODELS[idx];
+        attemptedModels.push(model);
         const endpoint = "https://" + apiHost + "/v1beta/models/" + model + ":generateContent";
         const requestUrl = endpoint + "?key=" + encodeURIComponent(key);
         const controller = new AbortController();
@@ -1052,7 +1055,7 @@
           };
         }
 
-        debugLog("POST " + endpoint + " | Web-Suche: " + (searchEnabled ? "ja" : "nein") + " (Modell: " + model + ")");
+        debugLog("Versuch " + (idx + 1) + "/" + GEMINI_MODELS.length + ": POST " + endpoint + " | Web-Suche: " + (searchEnabled ? "ja" : "nein"));
 
         try {
           const res = await fetch(requestUrl, {
@@ -1065,7 +1068,8 @@
           debugLog("Antwort von " + model + ": HTTP " + res.status + ", Länge: " + rawBody.length + " Zeichen");
           const data = parseApiResponseText(rawBody, res.status);
           if (!res.ok) {
-            throw new Error(data?.error?.message || ("HTTP " + res.status));
+            const apiMsg = data?.error?.message || ("HTTP " + res.status);
+            throw new Error(apiMsg + " [Status " + res.status + "]");
           }
           const candidate = data?.candidates?.[0];
           const searchQueries = candidate?.groundingMetadata?.webSearchQueries || [];
@@ -1098,11 +1102,20 @@
         } catch (err) {
           lastError = err;
           debugLog("Fehler bei " + model + ": " + err.name + ": " + err.message);
-          const isFallbackWorthwhile = /high demand|overloaded|503|429|UNAVAILABLE|quota|exceeded/i.test(err.message || "");
-          if (!isFallbackWorthwhile && err.name !== "AbortError") {
+
+          const msg = String(err.message || "");
+          const isFallbackWorthwhile =
+            err.name === "AbortError" ||
+            /high demand|overloaded|503|500|429|UNAVAILABLE|RESOURCE_EXHAUSTED|quota|exceeded|rate|limit/i.test(msg);
+
+          if (!isFallbackWorthwhile) {
             clearTimeout(timeoutId);
-            aiStatus.textContent = "Fehler bei der Gemini-Anfrage: " + err.message;
+            aiStatus.textContent = "Fehler bei der Gemini-Anfrage (" + model + "): " + msg;
             return;
+          }
+
+          if (idx < GEMINI_MODELS.length - 1) {
+            debugLog("Fallback aktiv -> wechsle von " + model + " auf " + GEMINI_MODELS[idx + 1]);
           }
         } finally {
           clearTimeout(timeoutId);
@@ -1110,9 +1123,11 @@
       }
 
       if (lastError?.name === "AbortError") {
-        aiStatus.textContent = "Zeitüberschreitung: Gemini hat nach 30 Sekunden nicht geantwortet.";
+        aiStatus.textContent = "Zeitüberschreitung nach 30 Sekunden (getestet: " + attemptedModels.join(" -> ") + ").";
       } else {
-        aiStatus.textContent = "Fehler bei der Gemini-Anfrage: " + (lastError?.message || "Alle Modelle aktuell ausgelastet oder Kontingent erschöpft.");
+        aiStatus.textContent =
+          "Fehler bei allen getesteten Modellen (" + attemptedModels.join(" -> ") + "): " +
+          (lastError?.message || "Kontingent erschöpft oder aktuell ausgelastet.");
       }
     });
 
