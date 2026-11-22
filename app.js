@@ -515,8 +515,10 @@ function renderList() {
 
     const delBtn = document.createElement("button");
     delBtn.type = "button";
-    delBtn.className = "danger";
-    delBtn.textContent = "Löschen";
+    delBtn.className = "unseen-btn";
+    delBtn.textContent = "✕";
+    delBtn.title = "Aus Merkliste löschen";
+    delBtn.setAttribute("aria-label", "Aus Merkliste löschen");
     delBtn.addEventListener("click", () => {
       items = items.filter((entry) => entry.id !== item.id);
       saveItems();
