@@ -278,20 +278,20 @@ a.link-btn {
 }
 
 .unseen-btn {
-  padding: 6px 10px;
-  font-size: 0.9rem;
+  padding: 6px 11px;
+  font-size: 0.92rem;
   line-height: 1.2;
   border-radius: 8px;
-  background: var(--panel);
-  color: var(--muted);
-  border: 1px solid var(--border);
-  font-weight: 600;
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--danger);
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  font-weight: 700;
 }
 
 .unseen-btn:hover {
-  color: var(--danger);
-  border-color: rgba(248, 113, 113, 0.45);
-  background: rgba(248, 113, 113, 0.12);
+  color: #fff;
+  border-color: rgba(248, 113, 113, 0.75);
+  background: rgba(248, 113, 113, 0.32);
 }
 
 .provider-grid {
