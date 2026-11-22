@@ -388,7 +388,7 @@
 
     function debugLog(message) {
       const now = new Date().toISOString().slice(11, 23);
-      debugLines.push(`[${now}] ${message}`);
+      debugLines.push("[" + now + "] " + message);
       if (debugLines.length > 80) debugLines = debugLines.slice(-80);
       debugOutput.textContent = debugLines.join("\n");
       debugOutput.scrollTop = debugOutput.scrollHeight;
@@ -507,9 +507,9 @@
 
         for (const rec of groupItems) {
           const title = stripMarkdown(rec.title || "Unbekannter Titel");
-          const year = rec.year ? ` (${escapeHtml(rec.year)})` : "";
+          const year = rec.year ? " (" + escapeHtml(rec.year) + ")" : "";
           const provider = normalizeProvider(rec.provider);
-          const runtime = rec.runtime ? `${escapeHtml(rec.runtime)}` : "";
+          const runtime = rec.runtime ? escapeHtml(rec.runtime) : "";
           const reason = stripMarkdown(rec.reason || "");
           let chosenRating = null;
 
@@ -520,7 +520,7 @@
           head.className = "rec-head";
 
           const titleWrap = document.createElement("div");
-          titleWrap.innerHTML = `<strong>${escapeHtml(title)}</strong>${year}<span class="provider-pill">${escapeHtml(provider)}</span>`;
+          titleWrap.innerHTML = "<strong>" + escapeHtml(title) + "</strong>" + year + '<span class="provider-pill">' + escapeHtml(provider) + "</span>";
 
           const addBtn = document.createElement("button");
           addBtn.type = "button";
@@ -537,7 +537,7 @@
 
           const meta = document.createElement("div");
           meta.className = "meta";
-          meta.textContent = runtime ? `Laufzeit: ${runtime}` : "";
+          meta.textContent = runtime ? "Laufzeit: " + runtime : "";
 
           const body = document.createElement("div");
           body.textContent = reason;
@@ -574,17 +574,17 @@
     function parseApiResponseText(rawBody, httpStatus) {
       const trimmed = String(rawBody || "").trim();
       if (!trimmed) {
-        throw new Error(`Leere Antwort (HTTP ${httpStatus})`);
+        throw new Error("Leere Antwort (HTTP " + httpStatus + ")");
       }
       if (trimmed.startsWith("<")) {
         const snippet = trimmed.replace(/\s+/g, " ").slice(0, 180);
-        throw new Error(`Server lieferte HTML statt JSON (HTTP ${httpStatus}): ${snippet}`);
+        throw new Error("Server lieferte HTML statt JSON (HTTP " + httpStatus + "): " + snippet);
       }
       try {
         return JSON.parse(trimmed);
       } catch {
         const snippet = trimmed.replace(/\s+/g, " ").slice(0, 180);
-        throw new Error(`Ungültiges JSON (HTTP ${httpStatus}): ${snippet}`);
+        throw new Error("Ungültiges JSON (HTTP " + httpStatus + "): " + snippet);
       }
     }
 
@@ -621,16 +621,15 @@
 
         const info = document.createElement("div");
         const ratingBadge = currentRating
-          ? `<span class="rating-pill">${escapeHtml(currentRating)}</span>`
+          ? '<span class="rating-pill">' + escapeHtml(currentRating) + "</span>"
           : "";
-        info.innerHTML = `
-          <div>
-            <strong>${escapeHtml(item.title)}</strong>
-            <span class="provider-pill">${escapeHtml(providerName)}</span>
-            ${ratingBadge}
-          </div>
-          <div class="meta">Status: ${escapeHtml(currentStatus)}</div>
-        `;
+        info.innerHTML =
+          "<div>" +
+            "<strong>" + escapeHtml(item.title) + "</strong>" +
+            '<span class="provider-pill">' + escapeHtml(providerName) + "</span>" +
+            ratingBadge +
+          "</div>" +
+          '<div class="meta">Status: ' + escapeHtml(currentStatus) + "</div>";
 
         const ratingControls = createRatingControls(currentRating, (nextRating) => {
           setItemRating(item, nextRating);
@@ -694,7 +693,7 @@
       apiKeyInput.value = "";
       updateApiBadge();
       aiStatus.textContent = "API-Key lokal gespeichert. Du kannst jetzt eine Empfehlung anfordern.";
-      debugLog(`API-Key gespeichert (Länge: ${val.length} Zeichen).`);
+      debugLog("API-Key gespeichert (Länge: " + val.length + " Zeichen).");
     });
 
     clearKeyBtn.addEventListener("click", () => {
@@ -710,13 +709,13 @@
       const key = getApiKey();
       const mood = moodInput.value.trim() || "abwechslungsreich";
       const titles = items
-        .map((i) => `${i.title} [${i.provider || "Sonstiges"}, ${i.status}${i.rating ? `, Bewertung: ${i.rating}` : ""}]`)
+        .map((i) => i.title + " [" + (i.provider || "Sonstiges") + ", " + i.status + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
         .join(", ");
 
-      debugLog(`Starte Empfehlung | Origin: ${window.location.origin} | Online: ${navigator.onLine} | Stimmung: "${mood}"`);
+      debugLog('Starte Empfehlung | Origin: ' + window.location.origin + ' | Online: ' + navigator.onLine + ' | Stimmung: "' + mood + '"');
 
       if (!key) {
-        aiStatus.textContent = `Demo-Hinweis: Für die Merkliste (${titles || "leer"}) wäre ein guter nächster Titel im Bereich „${mood}“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte oben unter „Daten & API“ einen Key speichern.`;
+        aiStatus.textContent = "Demo-Hinweis: Für die Merkliste (" + (titles || "leer") + ") wäre ein guter nächster Titel im Bereich „" + mood + "“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte oben unter „Daten & API“ einen Key speichern.";
         debugLog("Kein API-Key vorhanden -> Demo-Ausgabe.");
         return;
       }
@@ -726,9 +725,9 @@
 
       const promptText = [
         "Du bist ein hilfreicher Watchlist-Kurator.",
-        `Aktuelle Merkliste (inkl. Bewertungen): ${titles || "keine Einträge"}.`,
+        "Aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
         "Bevorzuge Stil und Tonfall von Titeln mit 'Finde ich super', beziehe 'Gefällt mir' positiv ein und meide Ähnliches zu 'Nicht gefällt mir'.",
-        `Wunsch/Stimmung: ${mood}.`,
+        "Wunsch/Stimmung: " + mood + ".",
         "Gib auf Deutsch 3 bis 4 konkrete Empfehlungen als reines JSON-Array (ohne Markdown-Codeblöcke) mit diesen Feldern:",
         '[{"cluster":"Gruppenname z.B. Passgenau & straff","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","reason":"1 kurzer Satz Begründung"}]'
       ].join(" ");
@@ -736,12 +735,12 @@
       let lastError = null;
 
       for (const model of GEMINI_MODELS) {
-        const endpoint = `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){model}:generateContent`;
-        const requestUrl = `${endpoint}?key=${encodeURIComponent(key)}`;
+        const endpoint = "[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/)" + model + ":generateContent";
+        const requestUrl = endpoint + "?key=" + encodeURIComponent(key);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-        debugLog(`POST ${endpoint} (Modell: ${model})`);
+        debugLog("POST " + endpoint + " (Modell: " + model + ")");
 
         try {
           const res = await fetch(requestUrl, {
@@ -760,19 +759,19 @@
             })
           });
           const rawBody = await res.text();
-          debugLog(`Antwort von ${model}: HTTP ${res.status}, Final-URL: ${res.url}, Länge: ${rawBody.length} Zeichen`);
+          debugLog("Antwort von " + model + ": HTTP " + res.status + ", Final-URL: " + res.url + ", Länge: " + rawBody.length + " Zeichen");
           const data = parseApiResponseText(rawBody, res.status);
           if (!res.ok) {
-            throw new Error(data?.error?.message || `HTTP ${res.status}`);
+            throw new Error(data?.error?.message || ("HTTP " + res.status));
           }
           const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          debugLog(`Kandidatentext erhalten (${rawText.length} Zeichen).`);
+          debugLog("Kandidatentext erhalten (" + rawText.length + " Zeichen).");
           try {
             const parsedRecs = parseRecommendationsJson(rawText);
             if (parsedRecs) {
-              aiStatus.textContent = `Vorschläge gruppiert nach Clustern (Modell: ${model}):`;
+              aiStatus.textContent = "Vorschläge gruppiert nach Clustern (Modell: " + model + "):";
               renderRecommendations(parsedRecs);
-              debugLog(`JSON erfolgreich geparst (${parsedRecs.length} Einträge).`);
+              debugLog("JSON erfolgreich geparst (" + parsedRecs.length + " Einträge).");
             } else {
               aiStatus.textContent = stripMarkdown(rawText) || "Keine Antwort erhalten.";
               debugLog("Kein Array in JSON gefunden -> Textausgabe.");
@@ -785,11 +784,11 @@
           return;
         } catch (err) {
           lastError = err;
-          debugLog(`Fehler bei ${model}: ${err.name}: ${err.message}`);
+          debugLog("Fehler bei " + model + ": " + err.name + ": " + err.message);
           const isOverloaded = /high demand|overloaded|503|429|UNAVAILABLE/i.test(err.message || "");
           if (!isOverloaded && err.name !== "AbortError") {
             clearTimeout(timeoutId);
-            aiStatus.textContent = `Fehler bei der Gemini-Anfrage: ${err.message}`;
+            aiStatus.textContent = "Fehler bei der Gemini-Anfrage: " + err.message;
             return;
           }
         } finally {
@@ -800,7 +799,7 @@
       if (lastError?.name === "AbortError") {
         aiStatus.textContent = "Zeitüberschreitung: Gemini hat nach 30 Sekunden nicht geantwortet.";
       } else {
-        aiStatus.textContent = `Fehler bei der Gemini-Anfrage: ${lastError?.message || "Alle Modelle aktuell ausgelastet."}`;
+        aiStatus.textContent = "Fehler bei der Gemini-Anfrage: " + (lastError?.message || "Alle Modelle aktuell ausgelastet.");
       }
     });
 
