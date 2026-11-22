@@ -69,6 +69,14 @@
       font-size: 1rem;
       margin: 0 0 12px;
     }
+    .cluster-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      margin: 14px 0 8px;
+    }
     .row {
       display: grid;
       gap: 10px;
@@ -104,6 +112,11 @@
       color: var(--danger);
       border: 1px solid rgba(248, 113, 113, 0.35);
     }
+    button.success {
+      background: rgba(34, 197, 94, 0.18);
+      color: var(--accent-2);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+    }
     .list {
       display: grid;
       gap: 10px;
@@ -118,6 +131,22 @@
       justify-content: space-between;
       align-items: center;
       gap: 10px;
+      flex-wrap: wrap;
+    }
+    .rec-card {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .rec-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
       flex-wrap: wrap;
     }
     .provider-pill {
@@ -216,7 +245,8 @@
         <input id="moodInput" type="text" placeholder="Stimmung / Genre (z. B. Thriller, Sci-Fi, Doku)" />
         <button id="recommendBtn" type="button">Empfehlung vorschlagen</button>
       </div>
-      <div id="aiOutput" class="status-msg">Trage unten deinen Gemini API-Key ein, um personalisierte Vorschläge zu erhalten.</div>
+      <div id="aiStatus" class="status-msg">Trage unten deinen Gemini API-Key ein, um personalisierte Vorschläge zu erhalten.</div>
+      <div id="aiRecommendations"></div>
     </section>
 
     <section class="card">
@@ -274,7 +304,8 @@
     const apiStatus = document.getElementById("apiStatus");
     const moodInput = document.getElementById("moodInput");
     const recommendBtn = document.getElementById("recommendBtn");
-    const aiOutput = document.getElementById("aiOutput");
+    const aiStatus = document.getElementById("aiStatus");
+    const aiRecommendations = document.getElementById("aiRecommendations");
 
     function saveItems() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -298,6 +329,102 @@
         '"': "&quot;",
         "'": "&#39;"
       }[m]));
+    }
+
+    function stripMarkdown(str) {
+      return String(str).replace(/\*\*/g, "").replace(/\*/g, "").trim();
+    }
+
+    function normalizeProvider(raw) {
+      if (!raw) return "Sonstiges";
+      const match = PROVIDERS.find((p) => p.toLowerCase() === String(raw).trim().toLowerCase());
+      return match || "Sonstiges";
+    }
+
+    function addToWatchlist(title, provider) {
+      const cleanTitle = stripMarkdown(title);
+      if (!cleanTitle) return;
+      items.unshift({
+        id: crypto.randomUUID(),
+        title: cleanTitle,
+        provider: normalizeProvider(provider),
+        status: "Geplant"
+      });
+      saveItems();
+      renderList();
+    }
+
+    function renderRecommendations(recs) {
+      aiRecommendations.innerHTML = "";
+      if (!Array.isArray(recs) || recs.length === 0) return;
+
+      const grouped = new Map();
+      for (const rec of recs) {
+        const clusterName = stripMarkdown(rec.cluster || "Passende Vorschläge");
+        if (!grouped.has(clusterName)) grouped.set(clusterName, []);
+        grouped.get(clusterName).push(rec);
+      }
+
+      for (const [clusterName, groupItems] of grouped.entries()) {
+        const heading = document.createElement("div");
+        heading.className = "cluster-title";
+        heading.textContent = clusterName;
+        aiRecommendations.append(heading);
+
+        for (const rec of groupItems) {
+          const title = stripMarkdown(rec.title || "Unbekannter Titel");
+          const year = rec.year ? ` (${escapeHtml(rec.year)})` : "";
+          const provider = normalizeProvider(rec.provider);
+          const runtime = rec.runtime ? `${escapeHtml(rec.runtime)}` : "";
+          const reason = stripMarkdown(rec.reason || "");
+
+          const card = document.createElement("div");
+          card.className = "rec-card";
+
+          const head = document.createElement("div");
+          head.className = "rec-head";
+
+          const titleWrap = document.createElement("div");
+          titleWrap.innerHTML = `<strong>${escapeHtml(title)}</strong>${year}<span class="provider-pill">${escapeHtml(provider)}</span>`;
+
+          const addBtn = document.createElement("button");
+          addBtn.type = "button";
+          addBtn.className = "secondary";
+          addBtn.textContent = "+ Merkliste";
+          addBtn.addEventListener("click", () => {
+            addToWatchlist(title, provider);
+            addBtn.textContent = "Gespeichert";
+            addBtn.className = "success";
+            addBtn.disabled = true;
+          });
+
+          head.append(titleWrap, addBtn);
+
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          meta.textContent = runtime ? `Laufzeit: ${runtime}` : "";
+
+          const body = document.createElement("div");
+          body.textContent = reason;
+
+          card.append(head);
+          if (runtime) card.append(meta);
+          if (reason) card.append(body);
+          aiRecommendations.append(card);
+        }
+      }
+    }
+
+    function parseRecommendationsJson(rawText) {
+      const cleaned = String(rawText)
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed?.recommendations)) return parsed.recommendations;
+      return null;
     }
 
     function renderList() {
@@ -387,14 +514,15 @@
       localStorage.setItem(API_KEY_STORAGE, val);
       apiKeyInput.value = "";
       updateApiBadge();
-      aiOutput.textContent = "API-Key lokal gespeichert. Du kannst jetzt eine Empfehlung anfordern.";
+      aiStatus.textContent = "API-Key lokal gespeichert. Du kannst jetzt eine Empfehlung anfordern.";
     });
 
     clearKeyBtn.addEventListener("click", () => {
       localStorage.removeItem(API_KEY_STORAGE);
       apiKeyInput.value = "";
       updateApiBadge();
-      aiOutput.textContent = "Gespeicherter API-Key entfernt.";
+      aiStatus.textContent = "Gespeicherter API-Key entfernt.";
+      aiRecommendations.innerHTML = "";
     });
 
     recommendBtn.addEventListener("click", async () => {
@@ -403,12 +531,20 @@
       const titles = items.map((i) => `${i.title} [${i.provider || "Sonstiges"}, ${i.status}]`).join(", ");
 
       if (!key) {
-        aiOutput.textContent = `Demo-Hinweis: Für die Merkliste (${titles || "leer"}) wäre ein guter nächster Titel im Bereich „${mood}“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte oben unter „Daten & API“ einen Key speichern.`;
+        aiStatus.textContent = `Demo-Hinweis: Für die Merkliste (${titles || "leer"}) wäre ein guter nächster Titel im Bereich „${mood}“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte oben unter „Daten & API“ einen Key speichern.`;
         return;
       }
 
-      aiOutput.textContent = "Frage Gemini an...";
-      const promptText = `Du bist ein hilfreicher Watchlist-Kurator. Aktuelle Merkliste: ${titles || "keine Einträge"}. Wunsch/Stimmung: ${mood}. Gib auf Deutsch 3 kurze, konkrete Empfehlungen mit jeweils 1 Satz Begründung.`;
+      aiStatus.textContent = "Frage Gemini an...";
+      aiRecommendations.innerHTML = "";
+
+      const promptText = [
+        "Du bist ein hilfreicher Watchlist-Kurator.",
+        `Aktuelle Merkliste: ${titles || "keine Einträge"}.`,
+        `Wunsch/Stimmung: ${mood}.`,
+        "Gib auf Deutsch 3 bis 4 konkrete Empfehlungen als reines JSON-Array (ohne Markdown-Codeblöcke) mit diesen Feldern:",
+        '[{"cluster":"Gruppenname z.B. Passgenau & straff","title":"Titel","year":"Jahr","runtime":"z.B. 113 Min.","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","reason":"1 kurzer Satz Begründung"}]'
+      ].join(" ");
 
       let lastError = null;
 
@@ -418,7 +554,7 @@
 
         try {
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+            `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){model}:generateContent?key=${encodeURIComponent(key)}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -439,8 +575,18 @@
           if (!res.ok) {
             throw new Error(data?.error?.message || `HTTP ${res.status}`);
           }
-          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Keine Antwort erhalten.";
-          aiOutput.textContent = text.trim();
+          const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          try {
+            const parsedRecs = parseRecommendationsJson(rawText);
+            if (parsedRecs) {
+              aiStatus.textContent = `Vorschläge gruppiert nach Clustern (Modell: ${model}):`;
+              renderRecommendations(parsedRecs);
+            } else {
+              aiStatus.textContent = stripMarkdown(rawText) || "Keine Antwort erhalten.";
+            }
+          } catch {
+            aiStatus.textContent = stripMarkdown(rawText) || "Keine Antwort erhalten.";
+          }
           clearTimeout(timeoutId);
           return;
         } catch (err) {
@@ -448,7 +594,7 @@
           const isOverloaded = /high demand|overloaded|503|429|UNAVAILABLE/i.test(err.message || "");
           if (!isOverloaded && err.name !== "AbortError") {
             clearTimeout(timeoutId);
-            aiOutput.textContent = `Fehler bei der Gemini-Anfrage: ${err.message}`;
+            aiStatus.textContent = `Fehler bei der Gemini-Anfrage: ${err.message}`;
             return;
           }
         } finally {
@@ -457,9 +603,9 @@
       }
 
       if (lastError?.name === "AbortError") {
-        aiOutput.textContent = "Zeitüberschreitung: Gemini hat nach 30 Sekunden nicht geantwortet.";
+        aiStatus.textContent = "Zeitüberschreitung: Gemini hat nach 30 Sekunden nicht geantwortet.";
       } else {
-        aiOutput.textContent = `Fehler bei der Gemini-Anfrage: ${lastError?.message || "Alle Modelle aktuell ausgelastet."}`;
+        aiStatus.textContent = `Fehler bei der Gemini-Anfrage: ${lastError?.message || "Alle Modelle aktuell ausgelastet."}`;
       }
     });
 
