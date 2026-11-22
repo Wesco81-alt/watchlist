@@ -1,3 +1,4 @@
+const APP_VERSION = "v1.5.0 (2026-11-22)";
 const STORAGE_KEY = "watchlist_kurator_items_v4";
 const SEEN_TITLES_STORAGE = "watchlist_kurator_seen_titles_v2";
 const SEEN_TITLES_LEGACY_STORAGE = "watchlist_kurator_seen_titles_v1";
@@ -115,8 +116,15 @@ const aiRecommendations = document.getElementById("aiRecommendations");
 const debugOutput = document.getElementById("debugOutput");
 const copyDebugBtn = document.getElementById("copyDebugBtn");
 const clearDebugBtn = document.getElementById("clearDebugBtn");
+const appVersionInfoEl = document.getElementById("appVersionInfo");
 
 let debugLines = [];
+
+function renderVersionInfo() {
+  if (appVersionInfoEl) {
+    appVersionInfoEl.textContent = "Version: " + APP_VERSION;
+  }
+}
 
 function switchView(viewId) {
   views.forEach((v) => v.classList.toggle("active", v.id === viewId));
@@ -609,10 +617,11 @@ recommendBtn.addEventListener("click", async () => {
   });
 });
 
+renderVersionInfo();
 seenCountEl.textContent = String(seenEntries.length);
 updateApiBadge();
 syncProviderSelects();
 renderProviderToggles();
 renderList();
 renderSeenList();
-debugLog("Watchlist-Kurator initialisiert.");
+debugLog("Watchlist-Kurator " + APP_VERSION + " initialisiert.");
