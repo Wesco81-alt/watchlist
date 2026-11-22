@@ -408,7 +408,7 @@
 
       aiOutput.textContent = "Frage Gemini an...";
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       try {
         const res = await fetch(
@@ -422,7 +422,12 @@
                 parts: [{
                   text: `Du bist ein hilfreicher Watchlist-Kurator. Aktuelle Merkliste: ${titles || "keine Einträge"}. Wunsch/Stimmung: ${mood}. Gib auf Deutsch 3 kurze, konkrete Empfehlungen mit jeweils 1 Satz Begründung.`
                 }]
-              }]
+              }],
+              generationConfig: {
+                thinkingConfig: {
+                  thinkingBudget: 0
+                }
+              }
             })
           }
         );
@@ -434,7 +439,7 @@
         aiOutput.textContent = text.trim();
       } catch (err) {
         if (err.name === "AbortError") {
-          aiOutput.textContent = "Zeitüberschreitung: Gemini hat nach 15 Sekunden nicht geantwortet.";
+          aiOutput.textContent = "Zeitüberschreitung: Gemini hat nach 30 Sekunden nicht geantwortet.";
         } else {
           aiOutput.textContent = `Fehler bei der Gemini-Anfrage: ${err.message}`;
         }
