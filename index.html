@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0f172a" />
   <title>Watchlist-Kurator</title>
+  <script>
+    window.addEventListener("error", function (event) {
+      var box = document.getElementById("fatalErrorBanner");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "fatalErrorBanner";
+        box.style.cssText = "background:#7f1d1d;color:#fecaca;padding:12px 16px;font-family:monospace;font-size:13px;border-bottom:2px solid #f87171;white-space:pre-wrap;z-index:9999;position:relative;";
+        document.documentElement.prepend(box);
+      }
+      box.textContent = "JS-Fehler: " + (event.message || "Unbekannt") +
+        (event.filename ? "\nDatei: " + event.filename + ":" + event.lineno : "");
+    });
+  </script>
   <link rel="stylesheet" href="./styles.css?v=dev" />
   <script src="./gemini.js?v=dev" defer></script>
   <script src="./app.js?v=dev" defer></script>
