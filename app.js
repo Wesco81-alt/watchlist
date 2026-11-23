@@ -2,6 +2,7 @@ const APP_VERSION = "lokaler Stand (dev)";
 const STORAGE_KEY = "watchlist_kurator_items_v4";
 const SEEN_TITLES_STORAGE = "watchlist_kurator_seen_titles_v2";
 const SEEN_TITLES_LEGACY_STORAGE = "watchlist_kurator_seen_titles_v1";
+const SEEN_RATINGS_STORAGE = "watchlist_kurator_seen_ratings_v1";
 const API_KEY_STORAGE = "watchlist_kurator_gemini_key_v1";
 const ACTIVE_PROVIDERS_STORAGE = "watchlist_kurator_active_providers_v1";
 const DEFAULT_SEEN_MIN_SECONDS = 300;
@@ -42,6 +43,7 @@ const providerInput = document.getElementById("providerInput");
 const statusInput = document.getElementById("statusInput");
 const providerFilter = document.getElementById("providerFilter");
 const ratingFilter = document.getElementById("ratingFilter");
+const seenRatingFilter = document.getElementById("seenRatingFilter");
 const apiKeyInput = document.getElementById("apiKeyInput");
 const saveKeyBtn = document.getElementById("saveKeyBtn");
 const clearKeyBtn = document.getElementById("clearKeyBtn");
@@ -59,6 +61,12 @@ const replaceSeenToggle = document.getElementById("replaceSeenToggle");
 const importSeenBtn = document.getElementById("importSeenBtn");
 const clearSeenImportInputBtn = document.getElementById("clearSeenImportInputBtn");
 const seenImportStatus = document.getElementById("seenImportStatus");
+const ratingsImportFileInput = document.getElementById("ratingsImportFileInput");
+const ratingsImportTextarea = document.getElementById("ratingsImportTextarea");
+const addRatedToSeenToggle = document.getElementById("addRatedToSeenToggle");
+const importRatingsBtn = document.getElementById("importRatingsBtn");
+const clearRatingsImportInputBtn = document.getElementById("clearRatingsImportInputBtn");
+const ratingsImportStatus = document.getElementById("ratingsImportStatus");
 const debugOutput = document.getElementById("debugOutput");
 const copyDebugBtn = document.getElementById("copyDebugBtn");
 const clearDebugBtn = document.getElementById("clearDebugBtn");
@@ -121,6 +129,72 @@ function saveSeenEntries() {
   }
 }
 
+function saveSeenRatings() {
+  localStorage.setItem(SEEN_RATINGS_STORAGE, JSON.stringify(seenRatings));
+}
+
+function loadSeenRatings() {
+  const raw = localStorage.getItem(SEEN_RATINGS_STORAGE);
+  const map = {};
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        Object.entries(parsed).forEach(([k, v]) => {
+          const key = stripMarkdown(k).toLowerCase();
+          if (key && RATINGS.includes(v)) {
+            map[key] = v;
+          }
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (Array.isArray(items)) {
+    items.forEach((it) => {
+      const key = stripMarkdown(it.title || "").toLowerCase();
+      if (key && RATINGS.includes(it.rating) && !map[key]) {
+        map[key] = it.rating;
+      }
+    });
+  }
+  return map;
+}
+
+function getTitleRating(title) {
+  const key = stripMarkdown(title).toLowerCase();
+  if (key && RATINGS.includes(seenRatings[key])) {
+    return seenRatings[key];
+  }
+  const watchMatch = items.find((i) => stripMarkdown(i.title || "").toLowerCase() === key);
+  if (watchMatch && RATINGS.includes(watchMatch.rating)) {
+    return watchMatch.rating;
+  }
+  return null;
+}
+
+function setTitleRating(title, nextRating) {
+  const clean = stripMarkdown(title);
+  const key = clean.toLowerCase();
+  if (!key) return;
+
+  const validRating = RATINGS.includes(nextRating) ? nextRating : null;
+  if (validRating) {
+    seenRatings[key] = validRating;
+  } else {
+    delete seenRatings[key];
+  }
+  saveSeenRatings();
+
+  items.forEach((it) => {
+    if (stripMarkdown(it.title || "").toLowerCase() === key) {
+      it.rating = validRating;
+    }
+  });
+  saveItems();
+}
+
 function findSeenIndex(title) {
   const lower = stripMarkdown(title).toLowerCase();
   return seenEntries.findIndex((e) => String(e.title).toLowerCase() === lower);
@@ -171,6 +245,10 @@ function markTitleAsSeen(title, mediaType = null) {
   const lower = clean.toLowerCase();
   const existingItem = items.find((entry) => stripMarkdown(entry.title).toLowerCase() === lower);
   const resolvedType = mediaType || existingItem?.type || null;
+  if (existingItem && RATINGS.includes(existingItem.rating) && !seenRatings[lower]) {
+    seenRatings[lower] = existingItem.rating;
+    saveSeenRatings();
+  }
   addSeenEntry(clean, resolvedType);
   items = items.filter((entry) => stripMarkdown(entry.title).toLowerCase() !== lower);
   saveItems();
@@ -330,6 +408,14 @@ function getRatingIcon(rating) {
   return "";
 }
 
+function mapThumbsValueToRating(val) {
+  const num = Number(String(val ?? "").trim());
+  if (num === 1) return "Nicht gefällt mir";
+  if (num === 2) return "Gefällt mir";
+  if (num === 3) return "Finde ich super";
+  return null;
+}
+
 function addToWatchlist(title, provider, rating = null, mediaType = null) {
   const cleanTitle = stripMarkdown(title);
   if (!cleanTitle) return;
@@ -345,9 +431,20 @@ function addToWatchlist(title, provider, rating = null, mediaType = null) {
 }
 
 function setItemRating(item, nextRating) {
-  item.rating = item.rating === nextRating ? null : nextRating;
+  const resolved = item.rating === nextRating ? null : nextRating;
+  item.rating = resolved;
+  const key = stripMarkdown(item.title || "").toLowerCase();
+  if (key) {
+    if (resolved) {
+      seenRatings[key] = resolved;
+    } else {
+      delete seenRatings[key];
+    }
+    saveSeenRatings();
+  }
   saveItems();
   renderList();
+  renderSeenList();
 }
 
 function createRatingControls(currentRating, onSelect) {
@@ -381,22 +478,47 @@ function renderSeenList() {
   if (seenCountEl) {
     seenCountEl.textContent = String(seenEntries.length);
   }
+  const selectedRating = seenRatingFilter ? seenRatingFilter.value : "Alle";
+
+  const filtered = seenEntries.filter((entry) => {
+    const rating = getTitleRating(entry.title);
+    if (selectedRating === "Ohne Bewertung") return !rating;
+    if (selectedRating !== "Alle") return rating === selectedRating;
+    return true;
+  });
+
   seenContainer.innerHTML = "";
-  if (seenEntries.length === 0) {
-    seenContainer.innerHTML = '<div class="meta">Noch keine Titel als gesehen markiert.</div>';
+  if (filtered.length === 0) {
+    seenContainer.innerHTML = '<div class="meta">Keine gesehenen Titel für den gewählten Filter vorhanden.</div>';
     return;
   }
 
-  seenEntries.forEach((entry) => {
+  filtered.forEach((entry) => {
+    const currentRating = getTitleRating(entry.title);
     const div = document.createElement("div");
     div.className = "item";
 
     const typeBadge = entry.type
       ? '<span class="type-pill">' + escapeHtml(entry.type) + "</span>"
       : "";
+    const ratingBadge = currentRating
+      ? '<span class="rating-pill">' + escapeHtml(getRatingIcon(currentRating) + " " + currentRating) + "</span>"
+      : "";
 
     const info = document.createElement("div");
-    info.innerHTML = "<strong>" + escapeHtml(entry.title) + "</strong>" + typeBadge;
+    info.innerHTML =
+      "<div>" +
+        "<strong>" + escapeHtml(entry.title) + "</strong>" +
+        typeBadge +
+        ratingBadge +
+      "</div>";
+
+    const ratingControls = createRatingControls(currentRating, (clickedRating) => {
+      const next = currentRating === clickedRating ? null : clickedRating;
+      setTitleRating(entry.title, next);
+      renderSeenList();
+      renderList();
+    });
 
     const actions = document.createElement("div");
     actions.className = "actions";
@@ -413,7 +535,7 @@ function renderSeenList() {
       renderList();
     });
 
-    actions.append(removeBtn);
+    actions.append(ratingControls, removeBtn);
     div.append(info, actions);
     seenContainer.append(div);
   });
@@ -664,6 +786,56 @@ function parseSeenImportPayload(rawText, minSeconds) {
   return parseNetflixCsvToEntries(trimmed, minSeconds);
 }
 
+function parseNetflixRatingsPayload(rawText) {
+  const trimmed = rawText.trim();
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    const parsed = JSON.parse(trimmed);
+    const list = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.ratings)
+        ? parsed.ratings
+        : null;
+    if (!list) {
+      throw new Error("JSON muss ein Array aus { title, rating } sein.");
+    }
+    const map = new Map();
+    list.forEach((entry) => {
+      const title = stripMarkdown(entry?.title || entry?.["Title Name"] || "");
+      const rating = RATINGS.includes(entry?.rating)
+        ? entry.rating
+        : mapThumbsValueToRating(entry?.thumbsValue ?? entry?.["Thumbs Value"]);
+      if (title && rating) {
+        map.set(title.toLowerCase(), { title, rating });
+      }
+    });
+    return Array.from(map.values());
+  }
+
+  const records = parseCsvRows(trimmed);
+  if (records.length === 0 || !("Title Name" in records[0])) {
+    throw new Error("CSV enthält keine gültige 'Title Name'-Spalte (Ratings.csv erwartet).");
+  }
+
+  // Sort by Event Utc Ts ascending so later ratings overwrite earlier ones
+  const sortable = records.map((r, idx) => {
+    const tsRaw = String(r["Event Utc Ts"] || "").trim();
+    const tsMs = tsRaw ? Date.parse(tsRaw.replace(" ", "T") + (tsRaw.endsWith("Z") ? "" : "Z")) : NaN;
+    return { row: r, idx, tsMs: Number.isFinite(tsMs) ? tsMs : idx };
+  });
+  sortable.sort((a, b) => a.tsMs - b.tsMs || a.idx - b.idx);
+
+  const byTitle = new Map();
+  for (const item of sortable) {
+    const r = item.row;
+    const title = stripMarkdown(String(r["Title Name"] || "").trim());
+    if (!title) continue;
+    const rating = mapThumbsValueToRating(r["Thumbs Value"]);
+    if (!rating) continue;
+    byTitle.set(title.toLowerCase(), { title, rating });
+  }
+  return Array.from(byTitle.values());
+}
+
 if (seenImportFileInput) {
   seenImportFileInput.addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
@@ -742,6 +914,91 @@ if (clearSeenImportInputBtn) {
   });
 }
 
+if (ratingsImportFileInput) {
+  ratingsImportFileInput.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      if (ratingsImportTextarea) ratingsImportTextarea.value = text;
+      if (ratingsImportStatus) {
+        ratingsImportStatus.textContent = `Datei „${file.name}“ geladen. Jetzt auf „Bewertungen importieren“ klicken.`;
+      }
+      debugLog(`Bewertungs-Importdatei geladen: ${file.name} (${file.size} Bytes).`);
+    } catch (err) {
+      const msg = "Fehler beim Lesen der Bewertungsdatei: " + (err?.message || String(err));
+      if (ratingsImportStatus) ratingsImportStatus.textContent = msg;
+      debugLog(msg);
+    }
+  });
+}
+
+if (importRatingsBtn) {
+  importRatingsBtn.addEventListener("click", () => {
+    const rawText = (ratingsImportTextarea?.value || "").trim();
+    if (!rawText) {
+      if (ratingsImportStatus) ratingsImportStatus.textContent = "Bitte zuerst Ratings.csv / JSON einfügen oder eine Datei wählen.";
+      return;
+    }
+
+    try {
+      const parsedRatings = parseNetflixRatingsPayload(rawText);
+      if (parsedRatings.length === 0) {
+        if (ratingsImportStatus) ratingsImportStatus.textContent = "Keine gültigen Bewertungen im Inhalt gefunden.";
+        return;
+      }
+
+      let ratingSavedCount = 0;
+      let addedToSeenCount = 0;
+      let watchlistUpdatedCount = 0;
+      const shouldAddToSeen = Boolean(addRatedToSeenToggle?.checked);
+
+      parsedRatings.forEach(({ title, rating }) => {
+        const key = title.toLowerCase();
+        seenRatings[key] = rating;
+        ratingSavedCount += 1;
+
+        items.forEach((it) => {
+          if (stripMarkdown(it.title || "").toLowerCase() === key) {
+            it.rating = rating;
+            watchlistUpdatedCount += 1;
+          }
+        });
+
+        if (shouldAddToSeen && findSeenIndex(title) === -1) {
+          addSeenEntry(title, null);
+          addedToSeenCount += 1;
+        }
+      });
+
+      saveSeenRatings();
+      saveSeenEntries();
+      saveItems();
+      renderSeenList();
+      renderList();
+
+      const summary =
+        `Bewertungen importiert: ${ratingSavedCount} Titel bewertet, ` +
+        `${addedToSeenCount} zu „Gesehen“ ergänzt (Gesamt Gesehen: ${seenEntries.length}), ` +
+        `${watchlistUpdatedCount} Merklisten-Einträge aktualisiert.`;
+      if (ratingsImportStatus) ratingsImportStatus.textContent = summary;
+      debugLog(summary);
+    } catch (err) {
+      const msg = "Bewertungs-Import fehlgeschlagen: " + (err?.message || String(err));
+      if (ratingsImportStatus) ratingsImportStatus.textContent = msg;
+      debugLog(msg);
+    }
+  });
+}
+
+if (clearRatingsImportInputBtn) {
+  clearRatingsImportInputBtn.addEventListener("click", () => {
+    if (ratingsImportTextarea) ratingsImportTextarea.value = "";
+    if (ratingsImportFileInput) ratingsImportFileInput.value = "";
+    if (ratingsImportStatus) ratingsImportStatus.textContent = "Eingabe geleert.";
+  });
+}
+
 addForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const title = titleInput.value.trim();
@@ -769,6 +1026,9 @@ addForm.addEventListener("submit", (e) => {
 
 providerFilter.addEventListener("change", renderList);
 ratingFilter.addEventListener("change", renderList);
+if (seenRatingFilter) {
+  seenRatingFilter.addEventListener("change", renderSeenList);
+}
 
 saveKeyBtn.addEventListener("click", () => {
   const val = apiKeyInput.value.trim();
@@ -798,7 +1058,12 @@ recommendBtn.addEventListener("click", async () => {
     .map((i) => i.title + (i.type ? " (" + i.type + ")" : "") + " [" + (i.provider || "Sonstiges") + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
     .join(", ");
   const seenListText = seenEntries.length > 0
-    ? seenEntries.map((e) => e.title + (e.type ? " (" + e.type + ")" : "")).join(", ")
+    ? seenEntries
+        .map((e) => {
+          const r = getTitleRating(e.title);
+          return e.title + (e.type ? " (" + e.type + ")" : "") + (r ? " [Bewertung: " + r + "]" : "");
+        })
+        .join(", ")
     : "keine";
 
   await fetchGeminiRecommendations({
@@ -873,6 +1138,7 @@ function loadSeenEntries() {
 }
 
 let seenEntries = loadSeenEntries();
+let seenRatings = loadSeenRatings();
 
 let enabledProviders = JSON.parse(localStorage.getItem(ACTIVE_PROVIDERS_STORAGE) || "null");
 if (!Array.isArray(enabledProviders)) {
