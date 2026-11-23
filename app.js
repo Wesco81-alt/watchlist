@@ -208,58 +208,11 @@ function isTitleMarkedSeen(title) {
 function inferKnownTypeForTitle(title) {
   const lower = stripMarkdown(title).toLowerCase();
   if (!lower) return null;
-  if (Array.isArray(seenEntries)) {
-    const seenMatch = seenEntries.find((e) => stripMarkdown(e.title || "").toLowerCase() === lower && e.type);
-    if (seenMatch?.type) return normalizeMediaType(seenMatch.type);
-  }
-  if (Array.isArray(items)) {
-    const watchMatch = items.find((i) => stripMarkdown(i.title || "").toLowerCase() === lower && i.type);
-    if (watchMatch?.type) return normalizeMediaType(watchMatch.type);
-  }
+  const seenMatch = seenEntries.find((e) => stripMarkdown(e.title || "").toLowerCase() === lower && e.type);
+  if (seenMatch?.type) return normalizeMediaType(seenMatch.type);
+  const watchMatch = items.find((i) => stripMarkdown(i.title || "").toLowerCase() === lower && i.type);
+  if (watchMatch?.type) return normalizeMediaType(watchMatch.type);
   return null;
-}
-
-function inferTypeFromTitlePatterns(title) {
-  const clean = stripMarkdown(title || "");
-  if (!clean) return null;
-
-  if (
-    /:\s*(?:staffel|season|miniserie|limited series|folge|episode|teil)\s*\d*/i.test(clean) ||
-    /\(\s*(?:staffel|season|miniserie|folge|episode)\b/i.test(clean) ||
-    /\b(?:staffel\s+\d+|miniserie|limited\s+series|tv-serie)\b/i.test(clean)
-  ) {
-    return "Serie";
-  }
-
-  if (/\b(?:doku|dokumentation|dokumentarfilm)\b/i.test(clean)) {
-    return "Doku";
-  }
-
-  if (/\b(?:film|spielfilm|kinofilm|movie|director'?s cut|extended version)\b/i.test(clean)) {
-    return "Film";
-  }
-
-  return null;
-}
-
-function autoInferMediaType(title) {
-  const clean = stripMarkdown(title || "");
-  if (!clean) return null;
-  return inferKnownTypeForTitle(clean) || inferTypeFromTitlePatterns(clean);
-}
-
-function autoFillMissingSeenTypes(entries) {
-  if (!Array.isArray(entries)) return 0;
-  let filledCount = 0;
-  entries.forEach((entry) => {
-    if (!entry || !entry.title || entry.type) return;
-    const inferred = autoInferMediaType(entry.title);
-    if (inferred) {
-      entry.type = normalizeMediaType(inferred);
-      filledCount += 1;
-    }
-  });
-  return filledCount;
 }
 
 function cycleSeenEntryType(title) {
@@ -278,8 +231,7 @@ function addSeenEntry(title, mediaType = null) {
   const clean = stripMarkdown(title);
   if (!clean) return;
   const idx = findSeenIndex(clean);
-  const resolvedRawType = mediaType || autoInferMediaType(clean);
-  const normalizedType = resolvedRawType ? normalizeMediaType(resolvedRawType) : null;
+  const normalizedType = mediaType ? normalizeMediaType(mediaType) : inferKnownTypeForTitle(clean);
   if (idx === -1) {
     seenEntries.unshift({ title: clean, type: normalizedType });
   } else if (normalizedType && !seenEntries[idx].type) {
@@ -315,7 +267,7 @@ function markTitleAsSeen(title, mediaType = null) {
   if (!clean) return;
   const lower = clean.toLowerCase();
   const existingItem = items.find((entry) => stripMarkdown(entry.title).toLowerCase() === lower);
-  const resolvedType = mediaType || existingItem?.type || autoInferMediaType(clean) || null;
+  const resolvedType = mediaType || existingItem?.type || null;
   if (existingItem && RATINGS.includes(existingItem.rating) && !seenRatings[lower]) {
     seenRatings[lower] = existingItem.rating;
     saveSeenRatings();
@@ -490,11 +442,10 @@ function mapThumbsValueToRating(val) {
 function addToWatchlist(title, provider, rating = null, mediaType = null) {
   const cleanTitle = stripMarkdown(title);
   if (!cleanTitle) return;
-  const resolvedType = mediaType || autoInferMediaType(cleanTitle) || null;
   items.unshift({
     id: crypto.randomUUID(),
     title: cleanTitle,
-    type: resolvedType ? normalizeMediaType(resolvedType) : null,
+    type: mediaType ? normalizeMediaType(mediaType) : null,
     provider: normalizeProvider(provider),
     rating: RATINGS.includes(rating) ? rating : null
   });
@@ -864,12 +815,11 @@ function parseSeenImportPayload(rawText, minSeconds) {
       .map((entry) => {
         if (typeof entry === "string") {
           const title = stripMarkdown(entry);
-          return title ? { title, type: autoInferMediaType(title) } : null;
+          return title ? { title, type: null } : null;
         }
         if (entry && typeof entry === "object" && entry.title) {
           const title = stripMarkdown(entry.title);
-          const resolvedType = entry.type ? normalizeMediaType(entry.type) : autoInferMediaType(title);
-          return title ? { title, type: resolvedType } : null;
+          return title ? { title, type: entry.type ? normalizeMediaType(entry.type) : null } : null;
         }
         return null;
       })
@@ -897,7 +847,7 @@ function parseNetflixRatingsPayload(rawText) {
       const rating = RATINGS.includes(entry?.rating)
         ? entry.rating
         : mapThumbsValueToRating(entry?.thumbsValue ?? entry?.["Thumbs Value"]);
-      const type = entry?.type ? normalizeMediaType(entry.type) : autoInferMediaType(title);
+      const type = entry?.type ? normalizeMediaType(entry.type) : null;
       if (title && rating) {
         map.set(title.toLowerCase(), { title, rating, type });
       }
@@ -924,7 +874,7 @@ function parseNetflixRatingsPayload(rawText) {
     if (!title) continue;
     const rating = mapThumbsValueToRating(r["Thumbs Value"]);
     if (!rating) continue;
-    byTitle.set(title.toLowerCase(), { title, rating, type: autoInferMediaType(title) });
+    byTitle.set(title.toLowerCase(), { title, rating, type: null });
   }
   return Array.from(byTitle.values());
 }
@@ -1223,19 +1173,13 @@ function loadSeenEntries() {
         return parsed
           .map((entry) => {
             if (typeof entry === "string") {
-              const title = stripMarkdown(entry);
-              return title
-                ? { title, type: inferTypeFromTitlePatterns(title) }
-                : null;
+              return { title: stripMarkdown(entry), type: null };
             }
             if (entry && typeof entry === "object" && entry.title) {
-              const title = stripMarkdown(entry.title);
-              return title
-                ? {
-                    title,
-                    type: entry.type ? normalizeMediaType(entry.type) : inferTypeFromTitlePatterns(title)
-                  }
-                : null;
+              return {
+                title: stripMarkdown(entry.title),
+                type: entry.type ? normalizeMediaType(entry.type) : null
+              };
             }
             return null;
           })
@@ -1252,10 +1196,7 @@ function loadSeenEntries() {
       if (Array.isArray(parsedLegacy)) {
         const migrated = parsedLegacy
           .filter((t) => typeof t === "string" && stripMarkdown(t))
-          .map((t) => {
-            const title = stripMarkdown(t);
-            return { title, type: inferTypeFromTitlePatterns(title) };
-          });
+          .map((t) => ({ title: stripMarkdown(t), type: null }));
         localStorage.setItem(SEEN_TITLES_STORAGE, JSON.stringify(migrated));
         return migrated;
       }
@@ -1267,10 +1208,6 @@ function loadSeenEntries() {
 }
 
 let seenEntries = loadSeenEntries();
-const initialAutoFilledTypes = autoFillMissingSeenTypes(seenEntries);
-if (initialAutoFilledTypes > 0) {
-  saveSeenEntries();
-}
 let seenRatings = loadSeenRatings();
 
 let enabledProviders = JSON.parse(localStorage.getItem(ACTIVE_PROVIDERS_STORAGE) || "null");
@@ -1288,7 +1225,4 @@ syncProviderSelects();
 renderProviderToggles();
 renderList();
 renderSeenList();
-debugLog(
-  "Watchlist-Kurator (" + APP_VERSION + ") initialisiert" +
-  (initialAutoFilledTypes > 0 ? " | Typ automatisch ergänzt bei " + initialAutoFilledTypes + " Gesehen-Einträgen." : ".")
-);
+debugLog("Watchlist-Kurator (" + APP_VERSION + ") initialisiert.");
