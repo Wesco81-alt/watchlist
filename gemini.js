@@ -27,8 +27,10 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
   return [
     "Du bist ein hilfreicher Watchlist-Kurator für Deutschland.",
     "Aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
-    "Bereits als gesehen markierte Titel (nicht erneut vorschlagen): " + seenListText + ".",
-    "Bevorzuge Stil und Tonfall von Titeln mit 'Finde ich super', beziehe 'Gefällt mir' positiv ein und meide Ähnliches zu 'Nicht gefällt mir'.",
+    "Bereits gesehene Titel (streng ausschließen, niemals erneut vorschlagen): " + seenListText + ".",
+    "Geschmacksprofil & Gewichtung: Analysiere vor allem die Titel mit der Bewertung 'Finde ich super' als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve und Themen. Beziehe 'Gefällt mir' als unterstützendes positives Signal ein und beachte auch gut bewertete Einträge aus der Gesehen-Liste.",
+    "Vermeide Titel mit 'Nicht gefällt mir' sowie direkte inhaltliche oder stilistische Kopien davon.",
+    "Schlage keinen Titel vor, der bereits in der Gesehen-Liste oder in der Merkliste steht (auch nicht in leicht abweichender Schreibweise oder als bereits gesehene Staffel/Reihe).",
     "Wunsch/Stimmung: " + mood + ".",
     "Verfügbarkeits-Vorgabe: " + availMode + ".",
     providerHint,
@@ -36,7 +38,7 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
     "Wichtig für 'cluster' und 'clusterDesc': Formuliere 'cluster' als pointierte, prägnante Überschrift (max. 3 bis 5 Wörter, z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') nach Inhalt, Atmosphäre oder Dramaturgie – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als scharfen, einprägsamen Einzeiler (max. 10–14 Wörter), der den gemeinsamen Kern der Titel auf den Punkt bringt.",
     "Gib bei avHint eine kurze, unverbindliche Einschätzung zu Bild/Ton (z. B. 'HD / Stereo' oder 'UHD / 5.1 möglich').",
     "Antworte auf Deutsch mit 3 bis 4 konkreten Empfehlungen als reines JSON-Array (ohne einleitenden oder abschließenden Text) mit diesen Feldern:",
-    '[{"cluster":"Pointierte Überschrift (3-5 Wörter)","clusterDesc":"Pointierter Einzeiler zum gemeinsamen Kern.","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"z.B. 113 Min. oder 2 Staffeln","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Per Suche plausibel / Mediathek / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Hinweis zur Verfügbarkeit"}]'
+    '[{"cluster":"Pointierte Überschrift (3-5 Wörter)","clusterDesc":"Pointierter Einzeiler zum gemeinsamen Kern.","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"z.B. 113 Min. oder 2 Staffeln","provider":"Einer aus: Sky, Netflix, ARD, ZDF, Tresat, Joyn, Netzkino, Prime Video, HBO Max, Apple TV, Rakuten TV, Sonstiges","availability":"Kurzstatus z.B. Per Suche plausibel / Mediathek / Verfügbarkeit prüfen","avHint":"z.B. HD/5.1 oder UHD/Atmos möglich","reason":"1 kurzer Satz Begründung inkl. Hinweis auf Verfügbarkeit und Bezug zu deinen Favoriten"}]'
   ].join(" ");
 }
 
