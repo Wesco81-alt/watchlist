@@ -97,7 +97,16 @@
     <div id="seenView" class="view">
       <section class="card">
         <h2>Als gesehen markierte Titel</h2>
-        <div class="meta">Diese Titel werden bei KI-Empfehlungen ausgespart. Bei versehentlicher Markierung kannst du einen Titel hier wieder entfernen.</div>
+        <div class="meta">Diese Titel werden bei KI-Empfehlungen ausgespart. Du kannst Bewertungen (👎 / 👍 / 👍👍) direkt setzen oder ändern und Titel mit ✕ entfernen.</div>
+        <div class="row filters" style="margin-top: 10px;">
+          <select id="seenRatingFilter" aria-label="Gesehene Titel nach Bewertung filtern">
+            <option value="Alle">Alle Bewertungen</option>
+            <option value="Finde ich super">👍👍 Finde ich super</option>
+            <option value="Gefällt mir">👍 Gefällt mir</option>
+            <option value="Nicht gefällt mir">👎 Nicht gefällt mir</option>
+            <option value="Ohne Bewertung">Ohne Bewertung</option>
+          </select>
+        </div>
         <div class="list" id="seenContainer"></div>
       </section>
     </div>
@@ -159,6 +168,33 @@
           <button id="clearSeenImportInputBtn" type="button" class="secondary">Eingabe leeren</button>
         </div>
         <div id="seenImportStatus" class="status-msg">Noch kein Import ausgeführt.</div>
+      </section>
+
+      <section class="card">
+        <h2>Bewertungen importieren (Netflix Ratings.csv oder JSON)</h2>
+        <div class="meta">
+          Wähle deine <code>Ratings.csv</code> (oder ein JSON) aus. <code>Thumbs Value</code> wird automatisch gemappt: <code>1</code> = 👎 Nicht gefällt mir, <code>2</code> = 👍 Gefällt mir, <code>3</code> = 👍👍 Finde ich super (bei Mehrfacheinträgen zählt der neueste Zeitstempel).
+        </div>
+        <div class="row" style="margin-top: 10px;">
+          <input id="ratingsImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Bewertungen auswählen" />
+        </div>
+        <div class="row" style="margin-top: 10px;">
+          <textarea
+            id="ratingsImportTextarea"
+            rows="6"
+            placeholder="Ratings.csv-Inhalt oder JSON hier einfügen..."
+            style="width: 100%; font-family: monospace; font-size: 12px;"
+          ></textarea>
+        </div>
+        <label class="check-row" style="margin-top: 8px;">
+          <input id="addRatedToSeenToggle" type="checkbox" checked />
+          <span>Bewertete Titel automatisch auch in die „Gesehen“-Liste aufnehmen, falls noch nicht vorhanden</span>
+        </label>
+        <div class="actions" style="margin-top: 12px;">
+          <button id="importRatingsBtn" type="button">Bewertungen importieren</button>
+          <button id="clearRatingsImportInputBtn" type="button" class="secondary">Eingabe leeren</button>
+        </div>
+        <div id="ratingsImportStatus" class="status-msg">Noch kein Bewertungs-Import ausgeführt.</div>
       </section>
 
       <section class="card">
