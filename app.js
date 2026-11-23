@@ -4,6 +4,7 @@ const SEEN_TITLES_STORAGE = "watchlist_kurator_seen_titles_v2";
 const SEEN_TITLES_LEGACY_STORAGE = "watchlist_kurator_seen_titles_v1";
 const API_KEY_STORAGE = "watchlist_kurator_gemini_key_v1";
 const ACTIVE_PROVIDERS_STORAGE = "watchlist_kurator_active_providers_v1";
+const DEFAULT_SEEN_MIN_SECONDS = 300;
 const PROVIDERS = [
   "Sky",
   "Netflix",
@@ -597,9 +598,15 @@ function mapNetflixViewingRow(row, minSeconds) {
     return null;
   }
 
-  const seriesMatch = rawTitle.match(/^(.+?):\s*(?:Staffel\s+\d+|Miniserie|Season\s+\d+|Limited Series)\b/i);
+  const seriesMatch = rawTitle.match(
+    /^(.+?):\s*(?:Staffel\s+\d+|Miniserie|Season\s+\d+|Limited Series|Ausgabe\s+\d+|\d+\s*:)/i
+  );
   if (seriesMatch) {
     return { title: seriesMatch[1].trim(), type: "Serie" };
+  }
+
+  if (/\((?:Folge|Episode)\s+\d+\)\s*$/i.test(rawTitle) && rawTitle.includes(":")) {
+    return { title: rawTitle.split(":", 1)[0].trim(), type: "Serie" };
   }
 
   return { title: rawTitle, type: "Film" };
@@ -684,8 +691,8 @@ if (importSeenBtn) {
       return;
     }
 
-    const minSecondsRaw = Number(seenMinSecondsInput?.value ?? 60);
-    const minSeconds = Number.isFinite(minSecondsRaw) && minSecondsRaw >= 0 ? minSecondsRaw : 60;
+    const minSecondsRaw = Number(seenMinSecondsInput?.value ?? DEFAULT_SEEN_MIN_SECONDS);
+    const minSeconds = Number.isFinite(minSecondsRaw) && minSecondsRaw >= 0 ? minSecondsRaw : DEFAULT_SEEN_MIN_SECONDS;
 
     try {
       const incoming = parseSeenImportPayload(rawText, minSeconds);
