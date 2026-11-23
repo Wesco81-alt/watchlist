@@ -1103,17 +1103,38 @@ recommendBtn.addEventListener("click", async () => {
   const mood = moodInput.value.trim() || "abwechslungsreich";
   const availMode = availabilityMode.value;
   const searchEnabled = Boolean(useSearchToggle.checked);
+
   const titles = items
-    .map((i) => i.title + (i.type ? " (" + i.type + ")" : "") + " [" + (i.provider || "Sonstiges") + (i.rating ? ", Bewertung: " + i.rating : "") + "]")
+    .map((i) => {
+      const meta = [i.type, i.provider || "Sonstiges", i.rating ? "Bewertung: " + i.rating : null]
+        .filter(Boolean)
+        .join(", ");
+      return i.title + (meta ? " [" + meta + "]" : "");
+    })
     .join(", ");
-  const seenListText = seenEntries.length > 0
-    ? seenEntries
-        .map((e) => {
-          const r = getTitleRating(e.title);
-          return e.title + (e.type ? " (" + e.type + ")" : "") + (r ? " [Bewertung: " + r + "]" : "");
-        })
-        .join(", ")
-    : "keine";
+
+  const superLiked = [];
+  const liked = [];
+  const disliked = [];
+  const allSeenTitles = [];
+
+  seenEntries.forEach((e) => {
+    const cleanTitle = stripMarkdown(e.title || "");
+    if (!cleanTitle) return;
+    allSeenTitles.push(cleanTitle);
+    const r = getTitleRating(cleanTitle);
+    const label = e.type ? cleanTitle + " (" + e.type + ")" : cleanTitle;
+    if (r === "Finde ich super") superLiked.push(label);
+    else if (r === "Gefällt mir") liked.push(label);
+    else if (r === "Nicht gefällt mir") disliked.push(label);
+  });
+
+  const seenListText = [
+    "Finde ich super: " + (superLiked.length > 0 ? superLiked.join(", ") : "keine"),
+    "Gefällt mir: " + (liked.length > 0 ? liked.join(", ") : "keine"),
+    "Nicht gefällt mir: " + (disliked.length > 0 ? disliked.join(", ") : "keine"),
+    "Alle gesehenen Titel (streng ausschließen): " + (allSeenTitles.length > 0 ? allSeenTitles.join(", ") : "keine")
+  ].join(" | ");
 
   await fetchGeminiRecommendations({
     apiKey: key,
