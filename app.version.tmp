@@ -1,8 +1,0 @@
-const APP_VERSION = "v1.5.1 (2a50fc8, 2026-11-23)";
-const STORAGE_KEY = "watchlist_kurator_items_v4";
-const SEEN_TITLES_STORAGE = "watchlist_kurator_seen_titles_v2";
-const SEEN_TITLES_LEGACY_STORAGE = "watchlist_kurator_seen_titles_v1";
-const SEEN_RATINGS_STORAGE = "watchlist_kurator_seen_ratings_v1";
-const API_KEY_STORAGE = "watchlist_kurator_gemini_key_v1";
-const ACTIVE_PROVIDERS_STORAGE = "watchlist_kurator_active_providers_v1";
-const DEFAULT_SEEN_MIN_SECONDS = 300;
