@@ -6,6 +6,7 @@ const GEMINI_MODELS = [
 ];
 const GEMINI_API_HOST = "generativelanguage.googleapis.com";
 const GEMINI_REQUEST_TIMEOUT_MS = 45000;
+const GEMINI_RETRY_DELAY_MS = 2000;
 
 function buildAvailabilityCheckUrl(title, provider) {
   const queryParts = [stripMarkdown(title)];
@@ -351,7 +352,8 @@ async function fetchGeminiRecommendations({
       }
 
       if (idx < GEMINI_MODELS.length - 1) {
-        onLog("Fallback aktiv -> wechsle von " + model + " auf " + GEMINI_MODELS[idx + 1]);
+        onLog("Fallback aktiv -> warte " + GEMINI_RETRY_DELAY_MS + "ms und wechsle von " + model + " auf " + GEMINI_MODELS[idx + 1]);
+        await new Promise((resolve) => setTimeout(resolve, GEMINI_RETRY_DELAY_MS));
       }
     } finally {
       clearTimeout(timeoutId);
