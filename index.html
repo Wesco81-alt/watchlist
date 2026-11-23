@@ -129,6 +129,39 @@
       </section>
 
       <section class="card">
+        <h2>Gesehen-Liste importieren (Netflix CSV oder JSON)</h2>
+        <div class="meta">
+          Wähle direkt deine <code>ViewingActivity.csv</code> (oder eine JSON-Datei) aus – oder füge CSV-/JSON-Inhalt ein. Kurzclips und Trailer werden automatisch herausgefiltert, Serien auf den Haupttitel verdichtet.
+        </div>
+        <div class="row" style="margin-top: 10px;">
+          <input id="seenImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Gesehen-Liste auswählen" />
+        </div>
+        <div class="row two" style="margin-top: 10px;">
+          <label class="meta" style="display: flex; align-items: center; gap: 8px;">
+            <span>Mindestdauer (Sek.):</span>
+            <input id="seenMinSecondsInput" type="number" min="0" step="10" value="60" style="width: 90px;" />
+          </label>
+        </div>
+        <div class="row" style="margin-top: 10px;">
+          <textarea
+            id="seenImportTextarea"
+            rows="6"
+            placeholder="ViewingActivity.csv-Inhalt oder JSON hier einfügen..."
+            style="width: 100%; font-family: monospace; font-size: 12px;"
+          ></textarea>
+        </div>
+        <label class="check-row" style="margin-top: 8px;">
+          <input id="replaceSeenToggle" type="checkbox" />
+          <span>Bestehende „Gesehen“-Liste vorher komplett ersetzen (Standard: mit vorhandenen Einträgen zusammenführen)</span>
+        </label>
+        <div class="actions" style="margin-top: 12px;">
+          <button id="importSeenBtn" type="button">Gesehen-Liste importieren</button>
+          <button id="clearSeenImportInputBtn" type="button" class="secondary">Eingabe leeren</button>
+        </div>
+        <div id="seenImportStatus" class="status-msg">Noch kein Import ausgeführt.</div>
+      </section>
+
+      <section class="card">
         <h2>Debug-Protokoll</h2>
         <div class="actions">
           <button id="copyDebugBtn" type="button" class="secondary">Log kopieren</button>
