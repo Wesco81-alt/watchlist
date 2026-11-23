@@ -1,5 +1,6 @@
-const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
+const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
 const GEMINI_API_HOST = "generativelanguage.googleapis.com";
+const GEMINI_REQUEST_TIMEOUT_MS = 45000;
 
 function buildAvailabilityCheckUrl(title, provider) {
   const queryParts = [stripMarkdown(title)];
@@ -268,7 +269,7 @@ async function fetchGeminiRecommendations({
     const endpoint = "https://" + GEMINI_API_HOST + "/v1beta/models/" + model + ":generateContent";
     const requestUrl = endpoint + "?key=" + encodeURIComponent(apiKey);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
 
     const requestBody = {
       contents: [{
@@ -354,7 +355,7 @@ async function fetchGeminiRecommendations({
   }
 
   if (lastError?.name === "AbortError") {
-    onStatus("Zeitüberschreitung nach 30 Sekunden (getestet: " + attemptedModels.join(" -> ") + ").");
+    onStatus("Zeitüberschreitung nach " + (GEMINI_REQUEST_TIMEOUT_MS / 1000) + " Sekunden (getestet: " + attemptedModels.join(" -> ") + ").");
   } else {
     onStatus(
       "Fehler bei allen getesteten Modellen (" + attemptedModels.join(" -> ") + "): " +
