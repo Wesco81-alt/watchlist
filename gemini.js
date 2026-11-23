@@ -28,10 +28,9 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
   return [
     "Du bist ein hilfreicher Watchlist-Kurator für Deutschland.",
     "Aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
-    "Bereits gesehene Titel (streng ausschließen, niemals erneut vorschlagen): " + seenListText + ".",
-    "Geschmacksprofil & Gewichtung: Analysiere vor allem die Titel mit der Bewertung 'Finde ich super' als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve und Themen. Beziehe 'Gefällt mir' als unterstützendes positives Signal ein und beachte auch gut bewertete Einträge aus der Gesehen-Liste.",
-    "Vermeide Titel mit 'Nicht gefällt mir' sowie direkte inhaltliche oder stilistische Kopien davon.",
-    "Schlage keinen Titel vor, der bereits in der Gesehen-Liste oder in der Merkliste steht (auch nicht in leicht abweichender Schreibweise oder als bereits gesehene Staffel/Reihe).",
+    "Gesehene Titel & Bewertungen (" + seenListText + ").",
+    "Geschmacksprofil & Gewichtung: Nutze vor allem 'Finde ich super' als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve und Themen, beziehe 'Gefällt mir' positiv ein und vermeide 'Nicht gefällt mir' sowie direkte inhaltliche oder stilistische Kopien davon.",
+    "Schlage keinen Titel vor, der in 'Alle gesehenen Titel' oder in der Merkliste steht (auch nicht in leicht abweichender Schreibweise oder als bereits gesehene Staffel/Reihe).",
     "Wunsch/Stimmung: " + mood + ".",
     "Verfügbarkeits-Vorgabe: " + availMode + ".",
     providerHint,
