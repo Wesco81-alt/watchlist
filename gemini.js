@@ -1,13 +1,16 @@
 const GEMINI_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
   "gemini-4-hydrogen",
-  "gemini-3.6-flash",
-  "gemini-3.8-flash"
+  "gemini-4-argon",
+  "gemini-4-neon"
 ];
 const GEMINI_API_HOST = "generativelanguage.googleapis.com";
 const GEMINI_REQUEST_TIMEOUT_MS = 45000;
 const GEMINI_RETRY_DELAY_MS = 2000;
-const GEMINI_MAX_FALLBACKS = 2;
+const GEMINI_MAX_FALLBACKS = 3;
 const GEMINI_PREFERRED_MODEL_STORAGE = "watchlist_kurator_gemini_preferred_model_v1";
 
 function buildAvailabilityCheckUrl(title, provider) {
@@ -74,16 +77,13 @@ function parseRecommendationsJson(rawText) {
 
 function parseApiResponseText(rawBody, httpStatus) {
   const trimmed = String(rawBody || "").trim();
-  if (!trimmed) {
-    throw new Error("Leere Antwort (HTTP " + httpStatus + ")");
-  }
+  if (!trimmed) throw new Error("Leere Antwort (HTTP " + httpStatus + ")");
   if (trimmed.startsWith("<")) {
     const snippet = trimmed.replace(/\s+/g, " ").slice(0, 180);
     throw new Error("Server lieferte HTML statt JSON (HTTP " + httpStatus + "): " + snippet);
   }
-  try {
-    return JSON.parse(trimmed);
-  } catch {
+  try { return JSON.parse(trimmed); }
+  catch {
     const snippet = trimmed.replace(/\s+/g, " ").slice(0, 180);
     throw new Error("Ungültiges JSON (HTTP " + httpStatus + "): " + snippet);
   }
@@ -116,33 +116,26 @@ function renderRecommendations(container, recs) {
   for (const rec of recs) {
     const clusterName = stripMarkdown(rec.cluster || "Soghafte Wendungen");
     const clusterDesc = stripMarkdown(rec.clusterDesc || rec.clusterDescription || rec.clusterSummary || "");
-    if (!grouped.has(clusterName)) {
-      grouped.set(clusterName, { desc: clusterDesc, items: [] });
-    } else if (!grouped.get(clusterName).desc && clusterDesc) {
-      grouped.get(clusterName).desc = clusterDesc;
-    }
+    if (!grouped.has(clusterName)) grouped.set(clusterName, { desc: clusterDesc, items: [] });
+    else if (!grouped.get(clusterName).desc && clusterDesc) grouped.get(clusterName).desc = clusterDesc;
     grouped.get(clusterName).items.push(rec);
   }
 
   for (const [clusterName, groupData] of grouped.entries()) {
     const clusterBlock = document.createElement("div");
     clusterBlock.className = "cluster-block";
-
     const clusterHeader = document.createElement("div");
     clusterHeader.className = "cluster-header";
-
     const heading = document.createElement("div");
     heading.className = "cluster-title";
     heading.textContent = clusterName;
     clusterHeader.append(heading);
-
     if (groupData.desc) {
       const descEl = document.createElement("div");
       descEl.className = "cluster-desc";
       descEl.textContent = groupData.desc;
       clusterHeader.append(descEl);
     }
-
     clusterBlock.append(clusterHeader);
 
     for (const rec of groupData.items) {
@@ -158,20 +151,13 @@ function renderRecommendations(container, recs) {
 
       const card = document.createElement("div");
       card.className = "rec-card";
-
       const head = document.createElement("div");
       head.className = "rec-head";
-
       const titleWrap = document.createElement("div");
-      titleWrap.innerHTML =
-        "<strong>" + escapeHtml(title) + "</strong>" + year +
-        '<span class="type-pill">' + escapeHtml(mediaType) + "</span>" +
-        '<span class="provider-pill">' + escapeHtml(provider) + "</span>" +
-        '<span class="avail-pill">' + escapeHtml(availability) + "</span>";
+      titleWrap.innerHTML = "<strong>" + escapeHtml(title) + "</strong>" + year + '<span class="type-pill">' + escapeHtml(mediaType) + "</span>" + '<span class="provider-pill">' + escapeHtml(provider) + "</span>" + '<span class="avail-pill">' + escapeHtml(availability) + "</span>";
 
       const rightActions = document.createElement("div");
       rightActions.className = "actions";
-
       const checkLink = document.createElement("a");
       checkLink.className = "link-btn";
       checkLink.href = buildAvailabilityCheckUrl(title, provider);
@@ -196,17 +182,14 @@ function renderRecommendations(container, recs) {
       const metaParts = [];
       if (runtime) metaParts.push("Laufzeit: " + runtime);
       if (avHint) metaParts.push("Bild/Ton (ca.): " + avHint);
-
       const meta = document.createElement("div");
       meta.className = "meta";
       meta.textContent = metaParts.join(" · ");
 
       const body = document.createElement("div");
       body.textContent = reason;
-
       const feedbackRow = document.createElement("div");
       feedbackRow.className = "rec-feedback-row";
-
       const seenBtn = createSeenButton(title, mediaType);
 
       function mountRatingControls() {
@@ -215,16 +198,12 @@ function renderRecommendations(container, recs) {
           mountRatingControls();
         });
         const existing = feedbackRow.querySelector(".rating-group");
-        if (existing) {
-          existing.replaceWith(group);
-        } else {
-          feedbackRow.prepend(group);
-        }
+        if (existing) existing.replaceWith(group);
+        else feedbackRow.prepend(group);
       }
 
       mountRatingControls();
       feedbackRow.append(seenBtn);
-
       card.append(head);
       if (metaParts.length > 0) card.append(meta);
       if (reason) card.append(body);
@@ -236,53 +215,20 @@ function renderRecommendations(container, recs) {
   }
 }
 
-async function fetchGeminiRecommendations({
-  apiKey,
-  mood,
-  availMode,
-  searchEnabled,
-  enabledProviders,
-  providers,
-  titles,
-  seenListText,
-  onStatus,
-  onRecommendations,
-  onLog
-}) {
+async function fetchGeminiRecommendations({ apiKey, mood, availMode, searchEnabled, enabledProviders, providers, titles, seenListText, onStatus, onRecommendations, onLog }) {
   const providerPool = enabledProviders.length > 0 ? enabledProviders : providers;
-  onLog(
-    'Starte Empfehlung | Web-Suche: ' + (searchEnabled ? "AN" : "AUS") +
-    ' | Modus: "' + availMode +
-    '" | Aktive Anbieter: [' + providerPool.join(", ") +
-    '] | Stimmung: "' + mood + '"'
-  );
+  onLog('Starte Empfehlung | Web-Suche: ' + (searchEnabled ? "AN" : "AUS") + ' | Modus: "' + availMode + '" | Aktive Anbieter: [' + providerPool.join(", ") + '] | Stimmung: "' + mood + '"');
 
   if (!apiKey) {
-    onStatus(
-      "Demo-Hinweis: Für die Merkliste (" + (titles || "leer") +
-      ") wäre ein guter nächster Titel im Bereich „" + mood +
-      "“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte unter „API & Debug“ einen Key speichern."
-    );
+    onStatus("Demo-Hinweis: Für die Merkliste (" + (titles || "leer") + ") wäre ein guter nächster Titel im Bereich „" + mood + "“ ein passender Film oder eine Serie mit starker Atmosphäre. Für echte Gemini-Antworten bitte unter „API & Debug“ einen Key speichern.");
     onLog("Kein API-Key vorhanden -> Demo-Ausgabe.");
     return;
   }
 
-  onStatus(searchEnabled
-    ? "Suche im Web nach aktueller Verfügbarkeit & erstelle Vorschläge..."
-    : "Frage Gemini an..."
-  );
+  onStatus(searchEnabled ? "Suche im Web nach aktueller Verfügbarkeit & erstelle Vorschläge..." : "Frage Gemini an...");
   onRecommendations([]);
 
-  const promptText = buildGeminiPrompt({
-    mood,
-    availMode,
-    enabledProviders,
-    providers,
-    titles,
-    seenListText,
-    searchEnabled
-  });
-
+  const promptText = buildGeminiPrompt({ mood, availMode, enabledProviders, providers, titles, seenListText, searchEnabled });
   const orderedModels = getOrderedGeminiModels();
   const maxAttempts = Math.min(1 + GEMINI_MAX_FALLBACKS, orderedModels.length);
   const attemptedModels = [];
@@ -296,44 +242,25 @@ async function fetchGeminiRecommendations({
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
 
-    const requestBody = {
-      contents: [{ parts: [{ text: promptText }] }]
-    };
-    if (searchEnabled) {
-      requestBody.tools = [{ google_search: {} }];
-    } else {
-      requestBody.generationConfig = { thinkingConfig: { thinkingBudget: 0 } };
-    }
+    const requestBody = { contents: [{ parts: [{ text: promptText }] }] };
+    if (searchEnabled) requestBody.tools = [{ google_search: {} }];
+    else requestBody.generationConfig = { thinkingConfig: { thinkingBudget: 0 } };
 
     onStatus("Prüfe Modell " + (idx + 1) + "/" + maxAttempts + ": " + model);
-    onLog(
-      "Versuch " + (idx + 1) + "/" + maxAttempts +
-      ": POST " + endpoint + " | Timeout: " + (GEMINI_REQUEST_TIMEOUT_MS / 1000) + "s | Web-Suche: " + (searchEnabled ? "ja" : "nein")
-    );
+    onLog("Versuch " + (idx + 1) + "/" + maxAttempts + ": POST " + endpoint + " | Timeout: " + (GEMINI_REQUEST_TIMEOUT_MS / 1000) + "s | Web-Suche: " + (searchEnabled ? "ja" : "nein"));
 
     try {
-      const res = await fetch(requestUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify(requestBody)
-      });
+      const res = await fetch(requestUrl, { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify(requestBody) });
       const rawBody = await res.text();
       onLog("Antwort von " + model + ": HTTP " + res.status + ", Länge: " + rawBody.length + " Zeichen");
       const data = parseApiResponseText(rawBody, res.status);
-      if (!res.ok) {
-        const apiMsg = data?.error?.message || ("HTTP " + res.status);
-        throw new Error(apiMsg + " [Status " + res.status + "]");
-      }
+      if (!res.ok) throw new Error((data?.error?.message || ("HTTP " + res.status)) + " [Status " + res.status + "]");
 
       const candidate = data?.candidates?.[0];
       const searchQueries = candidate?.groundingMetadata?.webSearchQueries || [];
       if (searchEnabled) {
-        if (searchQueries.length > 0) {
-          onLog("Google-Suche genutzt: " + searchQueries.join(" | "));
-        } else {
-          onLog("Hinweis: Keine webSearchQueries in groundingMetadata gemeldet.");
-        }
+        if (searchQueries.length > 0) onLog("Google-Suche genutzt: " + searchQueries.join(" | "));
+        else onLog("Hinweis: Keine webSearchQueries in groundingMetadata gemeldet.");
       }
 
       const parts = candidate?.content?.parts || [];
@@ -381,9 +308,6 @@ async function fetchGeminiRecommendations({
   if (lastError?.name === "AbortError") {
     onStatus("Zeitüberschreitung nach 45 Sekunden je Modell (getestet: " + attemptedModels.join(" -> ") + ").");
   } else {
-    onStatus(
-      "Fehler bei allen getesteten Modellen (" + attemptedModels.join(" -> ") + "): " +
-      (lastError?.message || "Kontingent erschöpft oder aktuell ausgelastet.")
-    );
+    onStatus("Fehler bei allen getesteten Modellen (" + attemptedModels.join(" -> ") + "): " + (lastError?.message || "Kontingent erschöpft oder aktuell ausgelastet."));
   }
 }
