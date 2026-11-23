@@ -97,7 +97,7 @@
     <div id="seenView" class="view">
       <section class="card">
         <h2>Als gesehen markierte Titel</h2>
-        <div class="meta">Diese Titel werden bei KI-Empfehlungen ausgespart. Du kannst Bewertungen (👎 / 👍 / 👍👍) direkt setzen oder ändern und Titel mit ✕ entfernen.</div>
+        <div class="meta">Diese Titel werden bei KI-Empfehlungen ausgespart. Du kannst Bewertungen (👎 / 👍 / 👍👍) und den Typ (Film / Serie) direkt anpassen und Titel mit ✕ entfernen.</div>
         <div class="row filters" style="margin-top: 10px;">
           <select id="seenRatingFilter" aria-label="Gesehene Titel nach Bewertung filtern">
             <option value="Alle">Alle Bewertungen</option>
@@ -105,6 +105,12 @@
             <option value="Gefällt mir">👍 Gefällt mir</option>
             <option value="Nicht gefällt mir">👎 Nicht gefällt mir</option>
             <option value="Ohne Bewertung">Ohne Bewertung</option>
+          </select>
+          <select id="seenTypeFilter" aria-label="Gesehene Titel nach Typ filtern">
+            <option value="Alle">Alle Typen</option>
+            <option value="Serie">Nur Serien</option>
+            <option value="Film">Nur Filme</option>
+            <option value="Ohne Typ">Ohne Typ-Label</option>
           </select>
         </div>
         <div class="list" id="seenContainer"></div>
