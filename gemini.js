@@ -1,4 +1,10 @@
-const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"];
+const GEMINI_MODELS = [
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash-lite",
+  "gemini-4-hydrogen",
+  "gemini-3.6-flash",
+  "gemini-3.8-flash"
+];
 const GEMINI_API_HOST = "generativelanguage.googleapis.com";
 const GEMINI_REQUEST_TIMEOUT_MS = 45000;
 
