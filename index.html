@@ -20,6 +20,7 @@
   </script>
   <link rel="stylesheet" href="./styles.css?v=dev" />
   <script src="./gemini.js?v=dev" defer></script>
+  <script src="./recommendation-count-fix.js?v=dev" defer></script>
   <script src="./app.js?v=dev" defer></script>
 </head>
 <body>
@@ -145,62 +146,30 @@
 
       <section class="card">
         <h2>Gesehen-Liste importieren (Netflix CSV oder JSON)</h2>
-        <div class="meta">
-          Wähle direkt deine <code>ViewingActivity.csv</code> (oder eine JSON-Datei) aus – oder füge CSV-/JSON-Inhalt ein. Kurzclips und Trailer werden herausgefiltert, Serien auf den Haupttitel zusammengeführt.
-        </div>
-        <div class="row" style="margin-top: 10px;">
-          <input id="seenImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Gesehen-Liste auswählen" />
-        </div>
-        <div class="row two" style="margin-top: 10px;">
-          <label class="meta" style="display: flex; align-items: center; gap: 8px;">
-            <span>Mindestdauer (Sek.):</span>
-            <input id="seenMinSecondsInput" type="number" min="0" step="10" value="300" style="width: 90px;" />
-          </label>
-        </div>
-        <div class="row" style="margin-top: 10px;">
-          <textarea id="seenImportTextarea" rows="6" placeholder="ViewingActivity.csv-Inhalt oder JSON hier einfügen..." style="width: 100%; font-family: monospace; font-size: 12px;"></textarea>
-        </div>
-        <label class="check-row" style="margin-top: 8px;">
-          <input id="replaceSeenToggle" type="checkbox" />
-          <span>Bestehende „Gesehen“-Liste vorher komplett ersetzen (Standard: mit vorhandenen Einträgen zusammenführen)</span>
-        </label>
-        <div class="actions" style="margin-top: 12px;">
-          <button id="importSeenBtn" type="button">Gesehen-Liste importieren</button>
-          <button id="clearSeenImportInputBtn" type="button" class="secondary">Eingabe leeren</button>
-        </div>
+        <div class="meta">Wähle direkt deine <code>ViewingActivity.csv</code> (oder eine JSON-Datei) aus – oder füge CSV-/JSON-Inhalt ein. Kurzclips und Trailer werden herausgefiltert, Serien auf den Haupttitel zusammengeführt.</div>
+        <div class="row" style="margin-top: 10px;"><input id="seenImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Gesehen-Liste auswählen" /></div>
+        <div class="row two" style="margin-top: 10px;"><label class="meta" style="display:flex;align-items:center;gap:8px;"><span>Mindestdauer (Sek.):</span><input id="seenMinSecondsInput" type="number" min="0" step="10" value="300" style="width:90px;" /></label></div>
+        <div class="row" style="margin-top: 10px;"><textarea id="seenImportTextarea" rows="6" placeholder="ViewingActivity.csv-Inhalt oder JSON hier einfügen..." style="width:100%;font-family:monospace;font-size:12px;"></textarea></div>
+        <label class="check-row" style="margin-top:8px;"><input id="replaceSeenToggle" type="checkbox" /><span>Bestehende „Gesehen“-Liste vorher komplett ersetzen (Standard: mit vorhandenen Einträgen zusammenführen)</span></label>
+        <div class="actions" style="margin-top:12px;"><button id="importSeenBtn" type="button">Gesehen-Liste importieren</button><button id="clearSeenImportInputBtn" type="button" class="secondary">Eingabe leeren</button></div>
         <div id="seenImportStatus" class="status-msg">Noch kein Import ausgeführt.</div>
       </section>
 
       <section class="card">
         <h2>Bewertungen importieren (Netflix Ratings.csv oder JSON)</h2>
-        <div class="meta">
-          Wähle deine <code>Ratings.csv</code> (oder ein JSON) aus. <code>Thumbs Value</code> wird automatisch gemappt: <code>1</code> = 👎 Nicht gefällt mir, <code>2</code> = 👍 Gefällt mir, <code>3</code> = 👍👍 Finde ich super.
-        </div>
-        <div class="row" style="margin-top: 10px;">
-          <input id="ratingsImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Bewertungen auswählen" />
-        </div>
-        <div class="row" style="margin-top: 10px;">
-          <textarea id="ratingsImportTextarea" rows="6" placeholder="Ratings.csv-Inhalt oder JSON hier einfügen..." style="width: 100%; font-family: monospace; font-size: 12px;"></textarea>
-        </div>
-        <label class="check-row" style="margin-top: 8px;">
-          <input id="addRatedToSeenToggle" type="checkbox" checked />
-          <span>Bewertete Titel automatisch auch in die „Gesehen“-Liste aufnehmen, falls noch nicht vorhanden</span>
-        </label>
-        <div class="actions" style="margin-top: 12px;">
-          <button id="importRatingsBtn" type="button">Bewertungen importieren</button>
-          <button id="clearRatingsImportInputBtn" type="button" class="secondary">Eingabe leeren</button>
-        </div>
+        <div class="meta">Wähle deine <code>Ratings.csv</code> (oder ein JSON) aus. <code>Thumbs Value</code> wird automatisch gemappt: <code>1</code> = 👎 Nicht gefällt mir, <code>2</code> = 👍 Gefällt mir, <code>3</code> = 👍👍 Finde ich super.</div>
+        <div class="row" style="margin-top:10px;"><input id="ratingsImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Bewertungen auswählen" /></div>
+        <div class="row" style="margin-top:10px;"><textarea id="ratingsImportTextarea" rows="6" placeholder="Ratings.csv-Inhalt oder JSON hier einfügen..." style="width:100%;font-family:monospace;font-size:12px;"></textarea></div>
+        <label class="check-row" style="margin-top:8px;"><input id="addRatedToSeenToggle" type="checkbox" checked /><span>Bewertete Titel automatisch auch in die „Gesehen“-Liste aufnehmen, falls noch nicht vorhanden</span></label>
+        <div class="actions" style="margin-top:12px;"><button id="importRatingsBtn" type="button">Bewertungen importieren</button><button id="clearRatingsImportInputBtn" type="button" class="secondary">Eingabe leeren</button></div>
         <div id="ratingsImportStatus" class="status-msg">Noch kein Bewertungs-Import ausgeführt.</div>
       </section>
 
       <section class="card">
         <h2>Debug-Protokoll</h2>
-        <div class="actions">
-          <button id="copyDebugBtn" type="button" class="secondary">Log kopieren</button>
-          <button id="clearDebugBtn" type="button" class="secondary">Log leeren</button>
-        </div>
+        <div class="actions"><button id="copyDebugBtn" type="button" class="secondary">Log kopieren</button><button id="clearDebugBtn" type="button" class="secondary">Log leeren</button></div>
         <div id="debugOutput" class="debug-box">Bereit – noch keine Anfrage protokolliert.</div>
-        <div id="appVersionInfo" class="meta" style="margin-top: 10px;">Version: –</div>
+        <div id="appVersionInfo" class="meta" style="margin-top:10px;">Version: –</div>
       </section>
     </div>
   </main>
