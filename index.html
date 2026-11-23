@@ -131,7 +131,7 @@
       <section class="card">
         <h2>Gesehen-Liste importieren (Netflix CSV oder JSON)</h2>
         <div class="meta">
-          Wähle direkt deine <code>ViewingActivity.csv</code> (oder eine JSON-Datei) aus – oder füge CSV-/JSON-Inhalt ein. Kurzclips und Trailer werden automatisch herausgefiltert, Serien auf den Haupttitel verdichtet.
+          Wähle direkt deine <code>ViewingActivity.csv</code> (oder eine JSON-Datei) aus – oder füge CSV-/JSON-Inhalt ein. Kurzclips und Trailer werden herausgefiltert, Serien auf den Haupttitel verdichtet.
         </div>
         <div class="row" style="margin-top: 10px;">
           <input id="seenImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Gesehen-Liste auswählen" />
@@ -139,7 +139,7 @@
         <div class="row two" style="margin-top: 10px;">
           <label class="meta" style="display: flex; align-items: center; gap: 8px;">
             <span>Mindestdauer (Sek.):</span>
-            <input id="seenMinSecondsInput" type="number" min="0" step="10" value="60" style="width: 90px;" />
+            <input id="seenMinSecondsInput" type="number" min="0" step="10" value="300" style="width: 90px;" />
           </label>
         </div>
         <div class="row" style="margin-top: 10px;">
