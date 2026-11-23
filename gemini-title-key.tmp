@@ -1,3 +1,0 @@
-function titleKey(title) {
-  return normalizeSuggestedTitle(title).toLocaleLowerCase("de-DE");
-}
