@@ -17,7 +17,7 @@ function normalizeSuggestedTitle(title) {
 }
 
 function titleKey(title) {
-  return normalizeSuggestedTitle(title).toLocaleLowerCulture("de-DE").toLowerCase();
+  return normalizeSuggestedTitle(title).toLocaleLowerCase("de-DE");
 }
 
 function loadRecommendationHistory() {
@@ -52,22 +52,16 @@ function recordRecommendations(recs) {
   if (!Array.isArray(recs)) return 0;
   const history = loadRecommendationHistory();
   const now = new Date().toISOString();
-  const keysBefore = new Set(history.map((entry) => titleKey(entry.title)));
-  let added = 0;
   recs.forEach((rec) => {
     const title = normalizeSuggestedTitle(rec?.title || "");
     const key = titleKey(title);
     if (!key) return;
     const existingIndex = history.findIndex((entry) => titleKey(entry.title) === key);
-    if (existingIndex >= 0) {
-      history[existingIndex].suggestedAt = now;
-    } else {
-      history.unshift({ title, suggestedAt: now, feedback: null });
-      added += 1;
-    }
+    if (existingIndex >= 0) history[existingIndex].suggestedAt = now;
+    else history.unshift({ title, suggestedAt: now, feedback: null });
   });
   saveRecommendationHistory(history);
-  return added || (recs.length > 0 ? recs.length : 0);
+  return recs.length;
 }
 
 function buildAvailabilityCheckUrl(title, provider) {
@@ -188,7 +182,6 @@ function renderRecommendations(container, recs) {
       const runtime = stripMarkdown(rec.runtime || "");
       const avHint = stripMarkdown(rec.avHint || "");
       const reason = stripMarkdown(rec.reason || "");
-      let chosenRating = null;
 
       const card = document.createElement("div");
       card.className = "rec-card";
@@ -214,7 +207,7 @@ function renderRecommendations(container, recs) {
       addBtn.className = "secondary";
       addBtn.textContent = "+ Merkliste";
       addBtn.addEventListener("click", () => {
-        addToWatchlist(title, provider, chosenRating, mediaType);
+        addToWatchlist(title, provider, null, mediaType);
         addBtn.textContent = "Gespeichert";
         addBtn.className = "success";
         addBtn.disabled = true;
@@ -239,8 +232,7 @@ function renderRecommendations(container, recs) {
 
       const feedbackRow = document.createElement("div");
       feedbackRow.className = "rec-feedback-row";
-      const seenBtn = createSeenButton(title, mediaType);
-      feedbackRow.append(seenBtn);
+      feedbackRow.append(createSeenButton(title, mediaType));
 
       card.prepend(head);
       card.append(feedbackRow);
@@ -303,7 +295,7 @@ async function fetchGeminiRecommendations({ apiKey, mood, availMode, searchEnabl
         if (parsedRecs) {
           localStorage.setItem(GEMINI_PREFERRED_MODEL_STORAGE, model);
           recordRecommendations(parsedRecs);
-          onStatus("Vorschläge erstellt (Modell: " + model + (searchEnabled ? ", mit Web-Suche" : "") + "): " + parsedRecs.length + " neue Vorschläge");
+          onStatus("Vorschläge erstellt (Modell: " + model + (searchEnabled ? ", mit Web-Suche" : "") + "): " + parsedRecs.length + " Vorschläge");
           onRecommendations(parsedRecs);
           onLog("JSON erfolgreich geparst (" + parsedRecs.length + " Einträge). Vorschlagsverlauf aktualisiert.");
         } else {
