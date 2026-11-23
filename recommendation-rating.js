@@ -5,26 +5,37 @@
     originalRenderRecommendations(container, recs);
     if (!Array.isArray(recs) || recs.length === 0) return;
 
-    const cards = container.querySelectorAll(".rec-card");
-    recs.slice(0, cards.length).forEach((rec, index) => {
+    const cards = Array.from(container.querySelectorAll(".rec-card"));
+    recs.forEach((rec, index) => {
+      const card = cards[index];
+      if (!card) return;
+
       const title = stripMarkdown(rec.title || "Unbekannter Titel");
       const mediaType = normalizeMediaType(rec.type, rec);
-      const card = cards[index];
       const feedbackRow = card.querySelector(".rec-feedback-row");
       if (!feedbackRow) return;
 
-      const ratingControls = createRatingControls(getTitleRating(title), (selectedRating) => {
-        const currentRating = getTitleRating(title);
-        const nextRating = currentRating === selectedRating ? null : selectedRating;
+      const currentRating = getTitleRating(title);
+      const ratingControls = createRatingControls(currentRating, (selectedRating) => {
+        const activeRating = getTitleRating(title);
+        const nextRating = activeRating === selectedRating ? null : selectedRating;
         setTitleRating(title, nextRating);
-        renderList();
+
+        if (nextRating) {
+          addSeenEntry(title, mediaType);
+        }
+
         renderSeenList();
+        renderList();
+        debugLog("KI-Empfehlung bewertet: " + title + " -> " + (nextRating || "Bewertung entfernt"));
         renderRecommendationsWithRatings(container, recs);
       });
+
       ratingControls.setAttribute("aria-label", "Bewertung für " + title);
       ratingControls.querySelectorAll("button").forEach((button) => {
         button.setAttribute("aria-label", button.title + " für " + title);
       });
+
       feedbackRow.prepend(ratingControls);
     });
   }
