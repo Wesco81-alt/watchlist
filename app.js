@@ -44,6 +44,7 @@ const statusInput = document.getElementById("statusInput");
 const providerFilter = document.getElementById("providerFilter");
 const ratingFilter = document.getElementById("ratingFilter");
 const seenRatingFilter = document.getElementById("seenRatingFilter");
+const seenTypeFilter = document.getElementById("seenTypeFilter");
 const apiKeyInput = document.getElementById("apiKeyInput");
 const saveKeyBtn = document.getElementById("saveKeyBtn");
 const clearKeyBtn = document.getElementById("clearKeyBtn");
@@ -204,11 +205,33 @@ function isTitleMarkedSeen(title) {
   return findSeenIndex(title) !== -1;
 }
 
+function inferKnownTypeForTitle(title) {
+  const lower = stripMarkdown(title).toLowerCase();
+  if (!lower) return null;
+  const seenMatch = seenEntries.find((e) => stripMarkdown(e.title || "").toLowerCase() === lower && e.type);
+  if (seenMatch?.type) return normalizeMediaType(seenMatch.type);
+  const watchMatch = items.find((i) => stripMarkdown(i.title || "").toLowerCase() === lower && i.type);
+  if (watchMatch?.type) return normalizeMediaType(watchMatch.type);
+  return null;
+}
+
+function cycleSeenEntryType(title) {
+  const idx = findSeenIndex(title);
+  if (idx === -1) return null;
+  const current = seenEntries[idx].type;
+  let nextType = "Serie";
+  if (current === "Serie") nextType = "Film";
+  else if (current === "Film") nextType = null;
+  seenEntries[idx].type = nextType;
+  saveSeenEntries();
+  return nextType;
+}
+
 function addSeenEntry(title, mediaType = null) {
   const clean = stripMarkdown(title);
   if (!clean) return;
   const idx = findSeenIndex(clean);
-  const normalizedType = mediaType ? normalizeMediaType(mediaType) : null;
+  const normalizedType = mediaType ? normalizeMediaType(mediaType) : inferKnownTypeForTitle(clean);
   if (idx === -1) {
     seenEntries.unshift({ title: clean, type: normalizedType });
   } else if (normalizedType && !seenEntries[idx].type) {
@@ -479,11 +502,20 @@ function renderSeenList() {
     seenCountEl.textContent = String(seenEntries.length);
   }
   const selectedRating = seenRatingFilter ? seenRatingFilter.value : "Alle";
+  const selectedType = seenTypeFilter ? seenTypeFilter.value : "Alle";
 
   const filtered = seenEntries.filter((entry) => {
     const rating = getTitleRating(entry.title);
-    if (selectedRating === "Ohne Bewertung") return !rating;
-    if (selectedRating !== "Alle") return rating === selectedRating;
+    if (selectedRating === "Ohne Bewertung" && rating) return false;
+    if (selectedRating !== "Alle" && selectedRating !== "Ohne Bewertung" && rating !== selectedRating) {
+      return false;
+    }
+
+    if (selectedType === "Ohne Typ" && entry.type) return false;
+    if (selectedType !== "Alle" && selectedType !== "Ohne Typ" && entry.type !== selectedType) {
+      return false;
+    }
+
     return true;
   });
 
@@ -500,7 +532,7 @@ function renderSeenList() {
 
     const typeBadge = entry.type
       ? '<span class="type-pill">' + escapeHtml(entry.type) + "</span>"
-      : "";
+      : '<span class="type-pill" style="opacity:0.65;">Kein Typ</span>';
     const ratingBadge = currentRating
       ? '<span class="rating-pill">' + escapeHtml(getRatingIcon(currentRating) + " " + currentRating) + "</span>"
       : "";
@@ -512,6 +544,17 @@ function renderSeenList() {
         typeBadge +
         ratingBadge +
       "</div>";
+
+    const typeBtn = document.createElement("button");
+    typeBtn.type = "button";
+    typeBtn.className = "secondary";
+    typeBtn.textContent = entry.type ? "Typ: " + entry.type : "Typ setzen";
+    typeBtn.title = "Zwischen Serie, Film und ohne Typ wechseln";
+    typeBtn.setAttribute("aria-label", "Typ wechseln für " + entry.title);
+    typeBtn.addEventListener("click", () => {
+      cycleSeenEntryType(entry.title);
+      renderSeenList();
+    });
 
     const ratingControls = createRatingControls(currentRating, (clickedRating) => {
       const next = currentRating === clickedRating ? null : clickedRating;
@@ -535,7 +578,7 @@ function renderSeenList() {
       renderList();
     });
 
-    actions.append(ratingControls, removeBtn);
+    actions.append(typeBtn, ratingControls, removeBtn);
     div.append(info, actions);
     seenContainer.append(div);
   });
@@ -804,8 +847,9 @@ function parseNetflixRatingsPayload(rawText) {
       const rating = RATINGS.includes(entry?.rating)
         ? entry.rating
         : mapThumbsValueToRating(entry?.thumbsValue ?? entry?.["Thumbs Value"]);
+      const type = entry?.type ? normalizeMediaType(entry.type) : null;
       if (title && rating) {
-        map.set(title.toLowerCase(), { title, rating });
+        map.set(title.toLowerCase(), { title, rating, type });
       }
     });
     return Array.from(map.values());
@@ -816,7 +860,6 @@ function parseNetflixRatingsPayload(rawText) {
     throw new Error("CSV enthält keine gültige 'Title Name'-Spalte (Ratings.csv erwartet).");
   }
 
-  // Sort by Event Utc Ts ascending so later ratings overwrite earlier ones
   const sortable = records.map((r, idx) => {
     const tsRaw = String(r["Event Utc Ts"] || "").trim();
     const tsMs = tsRaw ? Date.parse(tsRaw.replace(" ", "T") + (tsRaw.endsWith("Z") ? "" : "Z")) : NaN;
@@ -831,7 +874,7 @@ function parseNetflixRatingsPayload(rawText) {
     if (!title) continue;
     const rating = mapThumbsValueToRating(r["Thumbs Value"]);
     if (!rating) continue;
-    byTitle.set(title.toLowerCase(), { title, rating });
+    byTitle.set(title.toLowerCase(), { title, rating, type: null });
   }
   return Array.from(byTitle.values());
 }
@@ -953,7 +996,7 @@ if (importRatingsBtn) {
       let watchlistUpdatedCount = 0;
       const shouldAddToSeen = Boolean(addRatedToSeenToggle?.checked);
 
-      parsedRatings.forEach(({ title, rating }) => {
+      parsedRatings.forEach(({ title, rating, type }) => {
         const key = title.toLowerCase();
         seenRatings[key] = rating;
         ratingSavedCount += 1;
@@ -965,8 +1008,11 @@ if (importRatingsBtn) {
           }
         });
 
-        if (shouldAddToSeen && findSeenIndex(title) === -1) {
-          addSeenEntry(title, null);
+        const existingSeenIdx = findSeenIndex(title);
+        if (existingSeenIdx !== -1 && type && !seenEntries[existingSeenIdx].type) {
+          seenEntries[existingSeenIdx].type = type;
+        } else if (existingSeenIdx === -1 && shouldAddToSeen) {
+          addSeenEntry(title, type || inferKnownTypeForTitle(title));
           addedToSeenCount += 1;
         }
       });
@@ -1028,6 +1074,9 @@ providerFilter.addEventListener("change", renderList);
 ratingFilter.addEventListener("change", renderList);
 if (seenRatingFilter) {
   seenRatingFilter.addEventListener("change", renderSeenList);
+}
+if (seenTypeFilter) {
+  seenTypeFilter.addEventListener("change", renderSeenList);
 }
 
 saveKeyBtn.addEventListener("click", () => {
