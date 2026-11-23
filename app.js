@@ -51,6 +51,13 @@ const useSearchToggle = document.getElementById("useSearchToggle");
 const recommendBtn = document.getElementById("recommendBtn");
 const aiStatus = document.getElementById("aiStatus");
 const aiRecommendations = document.getElementById("aiRecommendations");
+const seenImportFileInput = document.getElementById("seenImportFileInput");
+const seenMinSecondsInput = document.getElementById("seenMinSecondsInput");
+const seenImportTextarea = document.getElementById("seenImportTextarea");
+const replaceSeenToggle = document.getElementById("replaceSeenToggle");
+const importSeenBtn = document.getElementById("importSeenBtn");
+const clearSeenImportInputBtn = document.getElementById("clearSeenImportInputBtn");
+const seenImportStatus = document.getElementById("seenImportStatus");
 const debugOutput = document.getElementById("debugOutput");
 const copyDebugBtn = document.getElementById("copyDebugBtn");
 const clearDebugBtn = document.getElementById("clearDebugBtn");
@@ -489,6 +496,242 @@ function renderList() {
     actions.append(ratingControls, seenBtn, delBtn);
     div.append(info, actions);
     watchlistContainer.append(div);
+  });
+}
+
+function parseDurationToSeconds(durationStr) {
+  const parts = String(durationStr || "").trim().split(":");
+  if (parts.length === 3) {
+    const h = Number(parts[0]);
+    const m = Number(parts[1]);
+    const s = Number(parts[2]);
+    if ([h, m, s].every(Number.isFinite)) {
+      return h * 3600 + m * 60 + s;
+    }
+  }
+  return 0;
+}
+
+function parseCsvRows(rawText) {
+  const cleanText = rawText.replace(/^\uFEFF/, "");
+  const firstLine = cleanText.split(/\r?\n/)[0] || "";
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semiCount = (firstLine.match(/;/g) || []).length;
+  const delimiter = semiCount > commaCount ? ";" : ",";
+
+  const rows = [];
+  let currentRow = [];
+  let currentField = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < cleanText.length; i++) {
+    const ch = cleanText[i];
+    const next = cleanText[i + 1];
+
+    if (inQuotes) {
+      if (ch === '"' && next === '"') {
+        currentField += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        currentField += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === delimiter) {
+      currentRow.push(currentField);
+      currentField = "";
+    } else if (ch === "\r" && next === "\n") {
+      currentRow.push(currentField);
+      rows.push(currentRow);
+      currentRow = [];
+      currentField = "";
+      i++;
+    } else if (ch === "\n" || ch === "\r") {
+      currentRow.push(currentField);
+      rows.push(currentRow);
+      currentRow = [];
+      currentField = "";
+    } else {
+      currentField += ch;
+    }
+  }
+
+  if (currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField);
+    rows.push(currentRow);
+  }
+
+  if (rows.length < 2) return [];
+  const headers = rows[0].map((h) => h.trim());
+  return rows
+    .slice(1)
+    .filter((r) => r.some((cell) => String(cell).trim() !== ""))
+    .map((r) => {
+      const obj = {};
+      headers.forEach((h, idx) => {
+        obj[h] = r[idx] !== undefined ? r[idx] : "";
+      });
+      return obj;
+    });
+}
+
+function mapNetflixViewingRow(row, minSeconds) {
+  const supp = String(row["Supplemental Video Type"] || "").trim();
+  if (supp && supp.toUpperCase() !== "NAN") {
+    return null;
+  }
+
+  const seconds = parseDurationToSeconds(row["Duration"]);
+  if (seconds < minSeconds) {
+    return null;
+  }
+
+  const rawTitle = stripMarkdown(String(row["Title"] || "").trim());
+  if (!rawTitle) {
+    return null;
+  }
+
+  if (/^(trailer|teaser|clip\b)/i.test(rawTitle)) {
+    return null;
+  }
+
+  const seriesMatch = rawTitle.match(/^(.+?):\s*(?:Staffel\s+\d+|Miniserie|Season\s+\d+|Limited Series)\b/i);
+  if (seriesMatch) {
+    return { title: seriesMatch[1].trim(), type: "Serie" };
+  }
+
+  return { title: rawTitle, type: "Film" };
+}
+
+function parseNetflixCsvToEntries(rawText, minSeconds) {
+  const records = parseCsvRows(rawText);
+  if (records.length === 0 || !("Title" in records[0])) {
+    throw new Error("CSV enthält keine gültige 'Title'-Spalte (ViewingActivity.csv erwartet).");
+  }
+
+  const deduped = new Map();
+  for (const row of records) {
+    const mapped = mapNetflixViewingRow(row, minSeconds);
+    if (!mapped) continue;
+    const key = mapped.title.toLowerCase();
+    if (!deduped.has(key)) {
+      deduped.set(key, { title: mapped.title, type: mapped.type });
+    } else if (mapped.type === "Serie") {
+      deduped.get(key).type = "Serie";
+    }
+  }
+  return Array.from(deduped.values());
+}
+
+function parseSeenImportPayload(rawText, minSeconds) {
+  const trimmed = rawText.trim();
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    const parsed = JSON.parse(trimmed);
+    const list = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.seenEntries)
+        ? parsed.seenEntries
+        : null;
+
+    if (!list) {
+      throw new Error("JSON muss ein Array aus { title, type } oder Strings sein.");
+    }
+
+    return list
+      .map((entry) => {
+        if (typeof entry === "string") {
+          const title = stripMarkdown(entry);
+          return title ? { title, type: null } : null;
+        }
+        if (entry && typeof entry === "object" && entry.title) {
+          const title = stripMarkdown(entry.title);
+          return title ? { title, type: entry.type ? normalizeMediaType(entry.type) : null } : null;
+        }
+        return null;
+      })
+      .filter(Boolean);
+  }
+
+  return parseNetflixCsvToEntries(trimmed, minSeconds);
+}
+
+if (seenImportFileInput) {
+  seenImportFileInput.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      if (seenImportTextarea) seenImportTextarea.value = text;
+      if (seenImportStatus) {
+        seenImportStatus.textContent = `Datei „${file.name}“ geladen. Jetzt auf „Gesehen-Liste importieren“ klicken.`;
+      }
+      debugLog(`Gesehen-Importdatei geladen: ${file.name} (${file.size} Bytes).`);
+    } catch (err) {
+      const msg = "Fehler beim Lesen der Datei: " + (err?.message || String(err));
+      if (seenImportStatus) seenImportStatus.textContent = msg;
+      debugLog(msg);
+    }
+  });
+}
+
+if (importSeenBtn) {
+  importSeenBtn.addEventListener("click", () => {
+    const rawText = (seenImportTextarea?.value || "").trim();
+    if (!rawText) {
+      if (seenImportStatus) seenImportStatus.textContent = "Bitte zuerst ViewingActivity.csv / JSON einfügen oder eine Datei wählen.";
+      return;
+    }
+
+    const minSecondsRaw = Number(seenMinSecondsInput?.value ?? 60);
+    const minSeconds = Number.isFinite(minSecondsRaw) && minSecondsRaw >= 0 ? minSecondsRaw : 60;
+
+    try {
+      const incoming = parseSeenImportPayload(rawText, minSeconds);
+      if (incoming.length === 0) {
+        if (seenImportStatus) seenImportStatus.textContent = "Keine passenden Titel nach Filterung gefunden.";
+        return;
+      }
+
+      if (replaceSeenToggle?.checked) {
+        seenEntries = [];
+        saveSeenEntries();
+      }
+
+      let addedCount = 0;
+      let updatedCount = 0;
+
+      incoming.forEach((entry) => {
+        const idx = findSeenIndex(entry.title);
+        if (idx === -1) {
+          addSeenEntry(entry.title, entry.type);
+          addedCount += 1;
+        } else if (entry.type && !seenEntries[idx].type) {
+          seenEntries[idx].type = entry.type;
+          updatedCount += 1;
+        }
+      });
+
+      saveSeenEntries();
+      renderSeenList();
+
+      const summary = `Import abgeschlossen (ab ${minSeconds}s): ${addedCount} neu hinzugefügt, ${updatedCount} Typ ergänzt (Gesamt: ${seenEntries.length}).`;
+      if (seenImportStatus) seenImportStatus.textContent = summary;
+      debugLog(summary);
+    } catch (err) {
+      const msg = "Import fehlgeschlagen: " + (err?.message || String(err));
+      if (seenImportStatus) seenImportStatus.textContent = msg;
+      debugLog(msg);
+    }
+  });
+}
+
+if (clearSeenImportInputBtn) {
+  clearSeenImportInputBtn.addEventListener("click", () => {
+    if (seenImportTextarea) seenImportTextarea.value = "";
+    if (seenImportFileInput) seenImportFileInput.value = "";
+    if (seenImportStatus) seenImportStatus.textContent = "Eingabe geleert.";
   });
 }
 
