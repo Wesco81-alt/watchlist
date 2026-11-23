@@ -15,7 +15,7 @@
         document.documentElement.prepend(box);
       }
       box.textContent = "JS-Fehler: " + (event.message || "Unbekannt") +
-        (event.filename ? "\nDatei: " + event.filename + ":" + event.lineno : "");
+        "\nDatei: " + (event.filename ? event.filename : "Unbekannt") + ":" + (event.lineno || "?");
     });
   </script>
   <link rel="stylesheet" href="./styles.css?v=dev" />
@@ -58,23 +58,6 @@
         <div id="aiStatus" class="status-msg">Trage unter „API &amp; Debug“ deinen Gemini API-Key ein, um Vorschläge zu erhalten.</div>
         <div id="aiRecommendations"></div>
       </section>
-
-      <section class="card">
-        <h2>Titel direkt zur Merkliste hinzufügen</h2>
-        <form id="addForm" class="row add">
-          <input id="titleInput" type="text" placeholder="Film, Serie oder Doku eingeben..." required />
-          <select id="typeInput" aria-label="Art des Titels">
-            <option value="Film">Film</option>
-            <option value="Serie">Serie</option>
-          </select>
-          <select id="providerInput" aria-label="Anbieter"></select>
-          <select id="statusInput" aria-label="Status">
-            <option value="Geplant">Geplant</option>
-            <option value="Gesehen">Gesehen</option>
-          </select>
-          <button type="submit">Hinzufügen</button>
-        </form>
-      </section>
     </div>
 
     <div id="watchlistView" class="view">
@@ -91,6 +74,23 @@
           </select>
         </div>
         <div class="list" id="watchlistContainer"></div>
+
+        <section class="card" style="margin-top: 16px;">
+          <h2>Titel direkt zur Merkliste hinzufügen</h2>
+          <form id="addForm" class="row add">
+            <input id="titleInput" type="text" placeholder="Film, Serie oder Doku eingeben..." required />
+            <select id="typeInput" aria-label="Art des Titels">
+              <option value="Film">Film</option>
+              <option value="Serie">Serie</option>
+            </select>
+            <select id="providerInput" aria-label="Anbieter"></select>
+            <select id="statusInput" aria-label="Status">
+              <option value="Geplant">Geplant</option>
+              <option value="Gesehen">Gesehen</option>
+            </select>
+            <button type="submit">Hinzufügen</button>
+          </form>
+        </section>
       </section>
     </div>
 
@@ -146,7 +146,7 @@
       <section class="card">
         <h2>Gesehen-Liste importieren (Netflix CSV oder JSON)</h2>
         <div class="meta">
-          Wähle direkt deine <code>ViewingActivity.csv</code> (oder eine JSON-Datei) aus – oder füge CSV-/JSON-Inhalt ein. Kurzclips und Trailer werden herausgefiltert, Serien auf den Haupttitel verdichtet.
+          Wähle direkt deine <code>ViewingActivity.csv</code> (oder eine JSON-Datei) aus – oder füge CSV-/JSON-Inhalt ein. Kurzclips und Trailer werden herausgefiltert, Serien auf den Haupttitel zusammengeführt.
         </div>
         <div class="row" style="margin-top: 10px;">
           <input id="seenImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Gesehen-Liste auswählen" />
@@ -158,12 +158,7 @@
           </label>
         </div>
         <div class="row" style="margin-top: 10px;">
-          <textarea
-            id="seenImportTextarea"
-            rows="6"
-            placeholder="ViewingActivity.csv-Inhalt oder JSON hier einfügen..."
-            style="width: 100%; font-family: monospace; font-size: 12px;"
-          ></textarea>
+          <textarea id="seenImportTextarea" rows="6" placeholder="ViewingActivity.csv-Inhalt oder JSON hier einfügen..." style="width: 100%; font-family: monospace; font-size: 12px;"></textarea>
         </div>
         <label class="check-row" style="margin-top: 8px;">
           <input id="replaceSeenToggle" type="checkbox" />
@@ -179,18 +174,13 @@
       <section class="card">
         <h2>Bewertungen importieren (Netflix Ratings.csv oder JSON)</h2>
         <div class="meta">
-          Wähle deine <code>Ratings.csv</code> (oder ein JSON) aus. <code>Thumbs Value</code> wird automatisch gemappt: <code>1</code> = 👎 Nicht gefällt mir, <code>2</code> = 👍 Gefällt mir, <code>3</code> = 👍👍 Finde ich super (bei Mehrfacheinträgen zählt der neueste Zeitstempel).
+          Wähle deine <code>Ratings.csv</code> (oder ein JSON) aus. <code>Thumbs Value</code> wird automatisch gemappt: <code>1</code> = 👎 Nicht gefällt mir, <code>2</code> = 👍 Gefällt mir, <code>3</code> = 👍👍 Finde ich super.
         </div>
         <div class="row" style="margin-top: 10px;">
           <input id="ratingsImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Bewertungen auswählen" />
         </div>
         <div class="row" style="margin-top: 10px;">
-          <textarea
-            id="ratingsImportTextarea"
-            rows="6"
-            placeholder="Ratings.csv-Inhalt oder JSON hier einfügen..."
-            style="width: 100%; font-family: monospace; font-size: 12px;"
-          ></textarea>
+          <textarea id="ratingsImportTextarea" rows="6" placeholder="Ratings.csv-Inhalt oder JSON hier einfügen..." style="width: 100%; font-family: monospace; font-size: 12px;"></textarea>
         </div>
         <label class="check-row" style="margin-top: 8px;">
           <input id="addRatedToSeenToggle" type="checkbox" checked />
