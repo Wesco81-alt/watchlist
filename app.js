@@ -208,19 +208,20 @@ function isTitleMarkedSeen(title) {
 function inferKnownTypeForTitle(title) {
   const lower = stripMarkdown(title).toLowerCase();
   if (!lower) return null;
-  const seenMatch = seenEntries.find((e) => stripMarkdown(e.title || "").toLowerCase() === lower && e.type);
-  if (seenMatch?.type) return normalizeMediaType(seenMatch.type);
-  const watchMatch = items.find((i) => stripMarkdown(i.title || "").toLowerCase() === lower && i.type);
-  if (watchMatch?.type) return normalizeMediaType(watchMatch.type);
+  if (Array.isArray(seenEntries)) {
+    const seenMatch = seenEntries.find((e) => stripMarkdown(e.title || "").toLowerCase() === lower && e.type);
+    if (seenMatch?.type) return normalizeMediaType(seenMatch.type);
+  }
+  if (Array.isArray(items)) {
+    const watchMatch = items.find((i) => stripMarkdown(i.title || "").toLowerCase() === lower && i.type);
+    if (watchMatch?.type) return normalizeMediaType(watchMatch.type);
+  }
   return null;
 }
 
-function autoInferMediaType(title) {
+function inferTypeFromTitlePatterns(title) {
   const clean = stripMarkdown(title || "");
   if (!clean) return null;
-
-  const known = inferKnownTypeForTitle(clean);
-  if (known) return known;
 
   if (
     /:\s*(?:staffel|season|miniserie|limited series|folge|episode|teil)\s*\d*/i.test(clean) ||
@@ -239,6 +240,12 @@ function autoInferMediaType(title) {
   }
 
   return null;
+}
+
+function autoInferMediaType(title) {
+  const clean = stripMarkdown(title || "");
+  if (!clean) return null;
+  return inferKnownTypeForTitle(clean) || inferTypeFromTitlePatterns(clean);
 }
 
 function autoFillMissingSeenTypes(entries) {
@@ -1217,14 +1224,18 @@ function loadSeenEntries() {
           .map((entry) => {
             if (typeof entry === "string") {
               const title = stripMarkdown(entry);
-              return { title, type: autoInferMediaType(title) };
+              return title
+                ? { title, type: inferTypeFromTitlePatterns(title) }
+                : null;
             }
             if (entry && typeof entry === "object" && entry.title) {
               const title = stripMarkdown(entry.title);
-              return {
-                title,
-                type: entry.type ? normalizeMediaType(entry.type) : autoInferMediaType(title)
-              };
+              return title
+                ? {
+                    title,
+                    type: entry.type ? normalizeMediaType(entry.type) : inferTypeFromTitlePatterns(title)
+                  }
+                : null;
             }
             return null;
           })
@@ -1243,7 +1254,7 @@ function loadSeenEntries() {
           .filter((t) => typeof t === "string" && stripMarkdown(t))
           .map((t) => {
             const title = stripMarkdown(t);
-            return { title, type: autoInferMediaType(title) };
+            return { title, type: inferTypeFromTitlePatterns(title) };
           });
         localStorage.setItem(SEEN_TITLES_STORAGE, JSON.stringify(migrated));
         return migrated;
