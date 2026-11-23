@@ -7,6 +7,8 @@ const GEMINI_MODELS = [
 const GEMINI_API_HOST = "generativelanguage.googleapis.com";
 const GEMINI_REQUEST_TIMEOUT_MS = 45000;
 const GEMINI_RETRY_DELAY_MS = 2000;
+const GEMINI_MAX_FALLBACKS = 2;
+const GEMINI_PREFERRED_MODEL_STORAGE = "watchlist_kurator_gemini_preferred_model_v1";
 
 function buildAvailabilityCheckUrl(title, provider) {
   const queryParts = [stripMarkdown(title)];
@@ -87,6 +89,25 @@ function parseApiResponseText(rawBody, httpStatus) {
   }
 }
 
+function getOrderedGeminiModels() {
+  const preferred = localStorage.getItem(GEMINI_PREFERRED_MODEL_STORAGE);
+  if (!GEMINI_MODELS.includes(preferred)) return [...GEMINI_MODELS];
+  return [preferred, ...GEMINI_MODELS.filter((model) => model !== preferred)];
+}
+
+function getHttpStatus(errorMessage) {
+  const match = String(errorMessage || "").match(/Status\s+(\d{3})|HTTP\s+(\d{3})/i);
+  return match ? Number(match[1] || match[2]) : null;
+}
+
+function isFallbackWorthwhile(error) {
+  if (error?.name === "AbortError") return true;
+  const message = String(error?.message || "");
+  const status = getHttpStatus(message);
+  if ([400, 401, 403, 404].includes(status)) return false;
+  return /high demand|overloaded|503|500|429|UNAVAILABLE|RESOURCE_EXHAUSTED|quota|exceeded|rate|limit/i.test(message);
+}
+
 function renderRecommendations(container, recs) {
   container.innerHTML = "";
   if (!Array.isArray(recs) || recs.length === 0) return;
@@ -94,9 +115,7 @@ function renderRecommendations(container, recs) {
   const grouped = new Map();
   for (const rec of recs) {
     const clusterName = stripMarkdown(rec.cluster || "Soghafte Wendungen");
-    const clusterDesc = stripMarkdown(
-      rec.clusterDesc || rec.clusterDescription || rec.clusterSummary || ""
-    );
+    const clusterDesc = stripMarkdown(rec.clusterDesc || rec.clusterDescription || rec.clusterSummary || "");
     if (!grouped.has(clusterName)) {
       grouped.set(clusterName, { desc: clusterDesc, items: [] });
     } else if (!grouped.get(clusterName).desc && clusterDesc) {
@@ -248,10 +267,9 @@ async function fetchGeminiRecommendations({
     return;
   }
 
-  onStatus(
-    searchEnabled
-      ? "Suche im Web nach aktueller Verfügbarkeit & erstelle Vorschläge..."
-      : "Frage Gemini an..."
+  onStatus(searchEnabled
+    ? "Suche im Web nach aktueller Verfügbarkeit & erstelle Vorschläge..."
+    : "Frage Gemini an..."
   );
   onRecommendations([]);
 
@@ -265,11 +283,13 @@ async function fetchGeminiRecommendations({
     searchEnabled
   });
 
+  const orderedModels = getOrderedGeminiModels();
+  const maxAttempts = Math.min(1 + GEMINI_MAX_FALLBACKS, orderedModels.length);
   const attemptedModels = [];
   let lastError = null;
 
-  for (let idx = 0; idx < GEMINI_MODELS.length; idx++) {
-    const model = GEMINI_MODELS[idx];
+  for (let idx = 0; idx < maxAttempts; idx++) {
+    const model = orderedModels[idx];
     attemptedModels.push(model);
     const endpoint = "https://" + GEMINI_API_HOST + "/v1beta/models/" + model + ":generateContent";
     const requestUrl = endpoint + "?key=" + encodeURIComponent(apiKey);
@@ -277,21 +297,18 @@ async function fetchGeminiRecommendations({
     const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
 
     const requestBody = {
-      contents: [{
-        parts: [{ text: promptText }]
-      }]
+      contents: [{ parts: [{ text: promptText }] }]
     };
     if (searchEnabled) {
       requestBody.tools = [{ google_search: {} }];
     } else {
-      requestBody.generationConfig = {
-        thinkingConfig: { thinkingBudget: 0 }
-      };
+      requestBody.generationConfig = { thinkingConfig: { thinkingBudget: 0 } };
     }
 
+    onStatus("Prüfe Modell " + (idx + 1) + "/" + maxAttempts + ": " + model);
     onLog(
-      "Versuch " + (idx + 1) + "/" + GEMINI_MODELS.length +
-      ": POST " + endpoint + " | Web-Suche: " + (searchEnabled ? "ja" : "nein")
+      "Versuch " + (idx + 1) + "/" + maxAttempts +
+      ": POST " + endpoint + " | Timeout: " + (GEMINI_REQUEST_TIMEOUT_MS / 1000) + "s | Web-Suche: " + (searchEnabled ? "ja" : "nein")
     );
 
     try {
@@ -308,6 +325,7 @@ async function fetchGeminiRecommendations({
         const apiMsg = data?.error?.message || ("HTTP " + res.status);
         throw new Error(apiMsg + " [Status " + res.status + "]");
       }
+
       const candidate = data?.candidates?.[0];
       const searchQueries = candidate?.groundingMetadata?.webSearchQueries || [];
       if (searchEnabled) {
@@ -317,15 +335,18 @@ async function fetchGeminiRecommendations({
           onLog("Hinweis: Keine webSearchQueries in groundingMetadata gemeldet.");
         }
       }
+
       const parts = candidate?.content?.parts || [];
       const rawText = parts.map((p) => p.text || "").join("\n").trim();
       onLog("Kandidatentext erhalten (" + rawText.length + " Zeichen).");
+
       try {
         const parsedRecs = parseRecommendationsJson(rawText);
         if (parsedRecs) {
-          onStatus("Vorschläge erstellt (Modell: " + model + (searchEnabled ? ", mit Web-Suche" : "") + "):");
+          localStorage.setItem(GEMINI_PREFERRED_MODEL_STORAGE, model);
+          onStatus("Vorschläge erstellt (Modell: " + model + (searchEnabled ? ", mit Web-Suche" : "") + "): ");
           onRecommendations(parsedRecs);
-          onLog("JSON erfolgreich geparst (" + parsedRecs.length + " Einträge).");
+          onLog("JSON erfolgreich geparst (" + parsedRecs.length + " Einträge). Modell für nächste Anfrage vorgemerkt: " + model);
         } else {
           onStatus(stripMarkdown(rawText) || "Keine Antwort erhalten.");
           onLog("Kein Array in JSON gefunden -> Textausgabe.");
@@ -340,19 +361,16 @@ async function fetchGeminiRecommendations({
       lastError = err;
       onLog("Fehler bei " + model + ": " + err.name + ": " + err.message);
 
-      const msg = String(err.message || "");
-      const isFallbackWorthwhile =
-        err.name === "AbortError" ||
-        /high demand|overloaded|503|500|429|UNAVAILABLE|RESOURCE_EXHAUSTED|quota|exceeded|rate|limit/i.test(msg);
-
-      if (!isFallbackWorthwhile) {
+      if (!isFallbackWorthwhile(err)) {
         clearTimeout(timeoutId);
-        onStatus("Fehler bei der Gemini-Anfrage (" + model + "): " + msg);
+        onStatus("Fehler bei der Gemini-Anfrage (" + model + "): " + err.message);
         return;
       }
 
-      if (idx < GEMINI_MODELS.length - 1) {
-        onLog("Fallback aktiv -> warte " + GEMINI_RETRY_DELAY_MS + "ms und wechsle von " + model + " auf " + GEMINI_MODELS[idx + 1]);
+      if (idx < maxAttempts - 1) {
+        const nextModel = orderedModels[idx + 1];
+        onStatus("Modell " + model + " nicht verfügbar – warte " + (GEMINI_RETRY_DELAY_MS / 1000) + "s, dann " + nextModel);
+        onLog("Fallback aktiv -> warte " + GEMINI_RETRY_DELAY_MS + "ms und wechsle von " + model + " auf " + nextModel);
         await new Promise((resolve) => setTimeout(resolve, GEMINI_RETRY_DELAY_MS));
       }
     } finally {
@@ -361,7 +379,7 @@ async function fetchGeminiRecommendations({
   }
 
   if (lastError?.name === "AbortError") {
-    onStatus("Zeitüberschreitung nach " + (GEMINI_REQUEST_TIMEOUT_MS / 1000) + " Sekunden (getestet: " + attemptedModels.join(" -> ") + ").");
+    onStatus("Zeitüberschreitung nach 45 Sekunden je Modell (getestet: " + attemptedModels.join(" -> ") + ").");
   } else {
     onStatus(
       "Fehler bei allen getesteten Modellen (" + attemptedModels.join(" -> ") + "): " +
