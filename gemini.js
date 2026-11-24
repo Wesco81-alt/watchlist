@@ -130,30 +130,34 @@ function buildAvailabilityCheckUrl(title, provider) {
 function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, titles, seenListText, searchEnabled, recentRecommendationTitles, recommendationCount }) {
   const count = recommendationCount || getRecommendationCount();
   const providerHint = enabledProviders.length > 0
-    ? "Nutze ausschließlich Anbieter aus dieser aktiven Auswahl: " + enabledProviders.join(", ") + "."
-    : "Nutze passende Anbieter aus: " + providers.join(", ") + ".";
+    ? "Bevorzuge beim Feld 'provider' nach Möglichkeit einen dieser aktiven Anbieter: " + enabledProviders.join(", ") + "."
+    : "Nutze als 'provider' einen passenden Eintrag aus: " + providers.join(", ") + ".";
   const repeatInstruction = recentRecommendationTitles?.length
     ? "Vermeide diese Titel, die kürzlich bereits vorgeschlagen wurden: " + recentRecommendationTitles.join(", ") + "."
     : "Es gibt keine kürzlich vorgeschlagenen Titel, die vermieden werden müssten.";
+  const focusHint = availMode
+    ? "Kontext-Hinweis (nur als grobe Richtung, keine Verfügbarkeits-Vorhersage): " + availMode + "."
+    : "";
   const searchInstruction = searchEnabled
-    ? "Nutze die Google-Suche, um aktuell zu prüfen, ob die vorgeschlagenen Titel tatsächlich verfügbar sind."
-    : "Gib eine realistische Einschätzung zur Verfügbarkeit an und markiere unsichere Fälle ehrlich.";
+    ? "Nutze die Google-Suche nur zur Faktenprüfung von Titel, Erscheinungsjahr, Laufzeit und Format – nicht, um eine garantierte aktuelle Streaming-Verfügbarkeit zu behaupten."
+    : "Verzichte auf Spekulationen über aktuelle Streaming-Rechte oder Katalog-Verfügbarkeiten; setze bei 'availability' ehrlich 'Anbieter prüfen', wenn kein fester Sender/Katalog sicher ist.";
 
   return [
-    "Du bist ein hilfreicher Watchlist-Kurator für Deutschland.",
+    "Du bist ein feinsinniger Film- und Serien-Kurator für Deutschland.",
+    "Dein Hauptauftrag ist NICHT die Vorhersage von Streaming-Verfügbarkeiten, sondern treffsichere Empfehlungen auf Basis des Sehverlaufs, der Bewertungen und einer sinnvollen thematischen, atmosphärischen oder dramaturgischen Clusterbildung.",
     "Aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
     "Gesehene Titel & Bewertungen (" + seenListText + ").",
+    "Geschmacksprofil & Gewichtung: Nutze vor allem 'Finde ich super' als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve, Erzähltempo und Themen. Beziehe 'Gefällt mir' positiv ein und vermeide 'Nicht gefällt mir' sowie direkte inhaltliche oder stilistische Kopien davon.",
     repeatInstruction,
+    "Schlage keine Titel aus der Merkliste oder der gesehenen Liste vor (auch nicht in leicht abweichender Schreibweise oder als bereits gesehene Staffel/Reihe).",
     "Wunsch/Stimmung: " + mood + ".",
-    "Verfügbarkeits-Vorgabe: " + availMode + ".",
+    focusHint,
     providerHint,
     searchInstruction,
-    "Schlage keine Titel aus der Merkliste oder der gesehenen Liste vor.",
-    "Formuliere 'cluster' als pointierte Überschrift mit maximal 3 bis 5 Wörtern.",
-    "Formuliere 'clusterDesc' als einprägsamen Einzeiler mit maximal 10 bis 14 Wörtern.",
-    "Gib bei avHint eine kurze Einschätzung zu Bild/Ton an.",
+    "Wichtig für 'cluster' und 'clusterDesc': Gruppiere die Empfehlungen in sinnvolle inhaltliche, atmosphärische oder dramaturgische Cluster. Formuliere 'cluster' als pointierte Überschrift mit maximal 3 bis 5 Wörtern (z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als einprägsamen Einzeiler mit maximal 10 bis 14 Wörtern, der den gemeinsamen Kern der Titel im Cluster auf den Punkt bringt.",
+    "Gib bei avHint eine kurze Einordnung zu Bild/Ton oder Inszenierung an (z. B. 'Dichte Bildsprache / 5.1' oder 'Kammerspiel / Stereo').",
     "Antworte auf Deutsch mit genau " + count + " konkreten Empfehlungen als reines JSON-Array ohne einleitenden oder abschließenden Text:",
-    '[{"cluster":"Pointierte Überschrift","clusterDesc":"Gemeinsamer Kern","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","availability":"Kurzstatus","avHint":"Bild/Ton","reason":"Kurze Begründung"}]'
+    '[{"cluster":"Pointierte Überschrift (3-5 Wörter)","clusterDesc":"Pointierter Einzeiler zum gemeinsamen Kern.","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","availability":"z.B. Geschmacks-Match oder Anbieter prüfen","avHint":"Bild/Ton oder Inszenierung","reason":"1 bis 2 prägnante Sätze zur dramaturgischen und atmosphärischen Passung zu deinen Favoriten"}]'
   ].join(" ");
 }
 
@@ -233,7 +237,7 @@ function renderRecommendations(container, recs) {
       const title = stripMarkdown(rec.title || "Unbekannter Titel");
       const mediaType = normalizeMediaType(rec.type, rec);
       const provider = normalizeProvider(rec.provider);
-      const availability = stripMarkdown(rec.availability || "Verfügbarkeit prüfen");
+      const availability = stripMarkdown(rec.availability || "Anbieter prüfen");
       const runtime = stripMarkdown(rec.runtime || "");
       const avHint = stripMarkdown(rec.avHint || "");
       const reason = stripMarkdown(rec.reason || "");
@@ -315,7 +319,7 @@ async function fetchGeminiRecommendations({ apiKey, mood, availMode, searchEnabl
   const timeoutMs = searchEnabled ? GEMINI_SEARCH_REQUEST_TIMEOUT_MS : GEMINI_REQUEST_TIMEOUT_MS;
   onLog("Wiederholungsschutz: " + recentRecommendationTitles.length + " Titel für " + RECOMMENDATION_COOLDOWN_DAYS + " Tage ausgeblendet.");
   onLog("Anfrage-Timeout: " + (timeoutMs / 1000) + "s | Gewünschte Vorschläge: " + count);
-  onStatus(searchEnabled ? "Suche im Web nach aktueller Verfügbarkeit & erstelle " + count + " Vorschläge..." : "Frage Gemini nach " + count + " Vorschlägen...");
+  onStatus(searchEnabled ? "Prüfe Titeldaten & kuratiere " + count + " Vorschläge in Clustern..." : "Kuratiere " + count + " Vorschläge in Clustern mit Gemini...");
   onRecommendations([]);
 
   const promptText = buildGeminiPrompt({ mood, availMode, enabledProviders, providers, titles, seenListText, searchEnabled, recentRecommendationTitles, recommendationCount: count });
