@@ -23,6 +23,12 @@ function titleKey(title) {
   return normalizeSuggestedTitle(title).toLocaleLowerCase("de-DE");
 }
 
+function normalizeRecommendationRatingLabel(val) {
+  if (val === "Nicht gefällt mir") return "Gefällt mir nicht";
+  if (["Gefällt mir nicht", "Gefällt mir", "Finde ich super"].includes(val)) return val;
+  return null;
+}
+
 function getRecommendationCount() {
   const stored = Number(localStorage.getItem(RECOMMENDATION_COUNT_STORAGE));
   return Number.isInteger(stored) && stored >= 1 && stored <= 10
@@ -82,7 +88,7 @@ function loadRecommendationHistory() {
         year: entry.year ? stripMarkdown(entry.year) : "",
         provider: entry.provider ? normalizeProvider(entry.provider) : "",
         cluster: entry.cluster ? stripMarkdown(entry.cluster) : "",
-        feedback: entry.feedback ?? null
+        feedback: normalizeRecommendationRatingLabel(entry.feedback) ?? null
       }));
   } catch {
     return [];
@@ -114,6 +120,24 @@ function getRecentRecommendationTitles() {
     .map((entry) => normalizeSuggestedTitle(entry.title));
 }
 
+function syncRecommendationHistoryFeedback(title, rating) {
+  const targetKey = titleKey(title);
+  if (!targetKey) return;
+  const normalized = normalizeRecommendationRatingLabel(rating);
+  const history = loadRecommendationHistory();
+  let changed = false;
+  history.forEach((entry) => {
+    if (titleKey(entry.title) === targetKey && entry.feedback !== normalized) {
+      entry.feedback = normalized;
+      changed = true;
+    }
+  });
+  if (changed) {
+    saveRecommendationHistory(history);
+    renderRecommendationHistoryView();
+  }
+}
+
 function recordRecommendations(recs) {
   if (!Array.isArray(recs)) return 0;
   const history = loadRecommendationHistory();
@@ -127,6 +151,9 @@ function recordRecommendations(recs) {
     const year = rec?.year ? stripMarkdown(rec.year) : "";
     const provider = rec?.provider ? normalizeProvider(rec.provider) : "";
     const cluster = rec?.cluster ? stripMarkdown(rec.cluster) : "";
+    const existingRating = typeof getTitleRating === "function"
+      ? normalizeRecommendationRatingLabel(getTitleRating(title))
+      : null;
 
     const existingIndex = history.findIndex((entry) => titleKey(entry.title) === key);
     if (existingIndex >= 0) {
@@ -137,7 +164,8 @@ function recordRecommendations(recs) {
         type: mediaType || history[existingIndex].type || null,
         year: year || history[existingIndex].year || "",
         provider: provider || history[existingIndex].provider || "",
-        cluster: cluster || history[existingIndex].cluster || ""
+        cluster: cluster || history[existingIndex].cluster || "",
+        feedback: existingRating ?? history[existingIndex].feedback ?? null
       };
     } else {
       history.unshift({
@@ -147,7 +175,7 @@ function recordRecommendations(recs) {
         year,
         provider,
         cluster,
-        feedback: null
+        feedback: existingRating
       });
       added += 1;
     }
@@ -203,7 +231,8 @@ function renderRecommendationHistoryView() {
           entry.type,
           entry.year,
           entry.provider,
-          entry.cluster
+          entry.cluster,
+          entry.feedback
         ]
           .filter(Boolean)
           .join(" ")
@@ -229,10 +258,14 @@ function renderRecommendationHistoryView() {
     row.className = "item";
 
     const info = document.createElement("div");
+    const ratingIcon = typeof getRatingIcon === "function" && entry.feedback
+      ? getRatingIcon(entry.feedback) + " "
+      : "";
     const badges = [
       entry.type ? '<span class="type-pill">' + escapeHtml(entry.type) + "</span>" : "",
       entry.provider ? '<span class="provider-pill">' + escapeHtml(entry.provider) + "</span>" : "",
       entry.cluster ? '<span class="avail-pill">' + escapeHtml(entry.cluster) + "</span>" : "",
+      entry.feedback ? '<span class="rating-pill">' + escapeHtml(ratingIcon + entry.feedback) + "</span>" : "",
       activeCooldown
         ? '<span class="avail-pill">Sperre aktiv (' + RECOMMENDATION_COOLDOWN_DAYS + "d)</span>"
         : '<span class="meta">Sperre abgelaufen</span>'
@@ -428,6 +461,34 @@ function isFallbackWorthwhile(error) {
   return /invalid argument|400|high demand|overloaded|503|500|429|UNAVAILABLE|RESOURCE_EXHAUSTED|quota|exceeded|rate|limit/i.test(message);
 }
 
+function buildRecommendationRatingGroup(title, onSelect) {
+  const group = document.createElement("div");
+  group.className = "rating-group";
+  const currentRating = typeof getTitleRating === "function"
+    ? normalizeRecommendationRatingLabel(getTitleRating(title))
+    : null;
+
+  const configs = [
+    { value: "Gefällt mir nicht", icon: "👎", label: "Gefällt mir nicht", activeClass: "selected-dislike" },
+    { value: "Gefällt mir", icon: "👍", label: "Gefällt mir", activeClass: "selected-like" },
+    { value: "Finde ich super", icon: "👍👍", label: "Finde ich super", activeClass: "selected-super" }
+  ];
+
+  configs.forEach((cfg) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "rate-btn";
+    if (currentRating === cfg.value) btn.classList.add(cfg.activeClass);
+    btn.textContent = cfg.icon;
+    btn.title = cfg.label;
+    btn.setAttribute("aria-label", cfg.label + " für " + title);
+    btn.addEventListener("click", () => onSelect(cfg.value));
+    group.append(btn);
+  });
+
+  return group;
+}
+
 function renderRecommendations(container, recs) {
   container.innerHTML = "";
   if (!Array.isArray(recs) || recs.length === 0) return;
@@ -518,7 +579,25 @@ function renderRecommendations(container, recs) {
 
       const feedbackRow = document.createElement("div");
       feedbackRow.className = "rec-feedback-row";
-      feedbackRow.append(createSeenButton(title, mediaType));
+
+      const handleSelectRating = (selectedRating) => {
+        const current = typeof getTitleRating === "function"
+          ? normalizeRecommendationRatingLabel(getTitleRating(title))
+          : null;
+        const nextRating = current === selectedRating ? null : selectedRating;
+        if (typeof setTitleRating === "function") setTitleRating(title, nextRating);
+        if (nextRating && typeof addSeenEntry === "function") addSeenEntry(title, mediaType);
+        syncRecommendationHistoryFeedback(title, nextRating);
+        if (typeof renderSeenList === "function") renderSeenList();
+        if (typeof renderList === "function") renderList();
+        if (typeof debugLog === "function") {
+          debugLog("KI-Empfehlung bewertet: " + title + " -> " + (nextRating || "Bewertung entfernt"));
+        }
+        renderRecommendations(container, recs);
+      };
+
+      const ratingGroup = buildRecommendationRatingGroup(title, handleSelectRating);
+      feedbackRow.append(ratingGroup, createSeenButton(title, mediaType));
       card.append(feedbackRow);
       clusterBlock.append(card);
     }
