@@ -154,10 +154,10 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
     focusHint,
     providerHint,
     searchInstruction,
-    "Wichtig für 'cluster' und 'clusterDesc': Gruppiere die Empfehlungen in sinnvolle inhaltliche, atmosphärische oder dramaturgische Cluster. Formuliere 'cluster' als pointierte Überschrift mit maximal 3 bis 5 Wörtern (z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als einprägsamen Einzeiler mit maximal 10 bis 14 Wörtern, der den gemeinsamen Kern der Titel im Cluster auf den Punkt bringt.",
-    "Gib bei avHint eine kurze Einordnung zu Bild/Ton oder Inszenierung an (z. B. 'Dichte Bildsprache / 5.1' oder 'Kammerspiel / Stereo').",
+    "Wichtig für 'cluster' und 'clusterDesc': Gruppiere die Empfehlungen in sinnvolle inhaltliche, atmosphärische oder dramaturgische Cluster. Formuliere 'cluster' als pointierte Überschrift mit maximal 3 bis 5 Wörtern (z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als ausführlichere, stimmige Clusterbeschreibung in 2 bis 3 Sätzen, die den gemeinsamen Kern, die Stimmung und das verbindende Motiv der Titel im Cluster greifbar ausführt.",
+    "Wichtig für 'reason': Schreibe in 'reason' eine ausführlichere Begründung in 3 bis 5 Sätzen. Erläutere darin sowohl die dramaturgische und atmosphärische Passung zu den Favoriten als auch konkrete Hinweise zu Bildsprache, Kameraführung, Schnitt/Rhythmus, Ton/Sounddesign oder Inszenierung direkt im fließenden Text.",
     "Antworte auf Deutsch mit genau " + count + " konkreten Empfehlungen als reines JSON-Array ohne einleitenden oder abschließenden Text:",
-    '[{"cluster":"Pointierte Überschrift (3-5 Wörter)","clusterDesc":"Pointierter Einzeiler zum gemeinsamen Kern.","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","availability":"z.B. Geschmacks-Match oder Anbieter prüfen","avHint":"Bild/Ton oder Inszenierung","reason":"1 bis 2 prägnante Sätze zur dramaturgischen und atmosphärischen Passung zu deinen Favoriten"}]'
+    '[{"cluster":"Pointierte Überschrift (3-5 Wörter)","clusterDesc":"Ausführlichere Clusterbeschreibung in 2 bis 3 Sätzen zum gemeinsamen Kern und zur Atmosphäre.","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","availability":"z.B. Geschmacks-Match oder Anbieter prüfen","reason":"Ausführliche Begründung (3 bis 5 Sätze) zur dramaturgischen und atmosphärischen Passung zu den Favoriten inklusive Einordnung von Bild/Ton und Inszenierung."}]'
   ].join(" ");
 }
 
@@ -239,8 +239,11 @@ function renderRecommendations(container, recs) {
       const provider = normalizeProvider(rec.provider);
       const availability = stripMarkdown(rec.availability || "Anbieter prüfen");
       const runtime = stripMarkdown(rec.runtime || "");
-      const avHint = stripMarkdown(rec.avHint || "");
-      const reason = stripMarkdown(rec.reason || "");
+      const legacyAvHint = stripMarkdown(rec.avHint || "");
+      const baseReason = stripMarkdown(rec.reason || "");
+      const reason = baseReason && legacyAvHint && !baseReason.toLowerCase().includes(legacyAvHint.toLowerCase())
+        ? baseReason + " Inszenierung & Bild/Ton: " + legacyAvHint + "."
+        : (baseReason || legacyAvHint);
 
       const card = document.createElement("div");
       card.className = "rec-card";
@@ -276,13 +279,10 @@ function renderRecommendations(container, recs) {
       head.append(titleWrap, rightActions);
       card.append(head);
 
-      const metaParts = [];
-      if (runtime) metaParts.push("Laufzeit: " + runtime);
-      if (avHint) metaParts.push("Bild/Ton (ca.): " + avHint);
-      if (metaParts.length) {
+      if (runtime) {
         const meta = document.createElement("div");
         meta.className = "meta";
-        meta.textContent = metaParts.join(" · ");
+        meta.textContent = "Laufzeit: " + runtime;
         card.append(meta);
       }
       if (reason) {
@@ -341,7 +341,7 @@ async function fetchGeminiRecommendations({ apiKey, mood, availMode, searchEnabl
 
     const requestBody = {
       contents: [{ parts: [{ text: promptText }] }],
-      generationConfig: { maxOutputTokens: 2048 }
+      generationConfig: { maxOutputTokens: 3072 }
     };
     if (searchEnabled) requestBody.tools = [{ google_search: {} }];
     else requestBody.generationConfig.thinkingConfig = { thinkingBudget: 0 };
