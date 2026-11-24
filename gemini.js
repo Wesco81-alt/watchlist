@@ -372,7 +372,7 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
     "Dein Hauptauftrag ist NICHT die Vorhersage von Streaming-Verfügbarkeiten, sondern treffsichere Empfehlungen auf Basis des Sehverlaufs, der Bewertungen und einer sinnvollen thematischen, atmosphärischen oder dramaturgischen Clusterbildung.",
     "Aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
     "Gesehene Titel & Bewertungen (" + seenListText + ").",
-    "Geschmacksprofil & Gewichtung: Nutze vor allem 'Finde ich super' als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve, Erzähltempo und Themen. Beziehe 'Gefällt mir' positiv ein und vermeide 'Nicht gefällt mir' sowie direkte inhaltliche oder stilistische Kopien davon.",
+    "Geschmacksprofil & Gewichtung: Nutze vor allem 'Finde ich super' als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve, Erzähltempo und Themen. Beziehe 'Gefällt mir' positiv ein und vermeide 'Gefällt mir nicht' sowie direkte inhaltliche oder stilistische Kopien davon.",
     repeatInstruction,
     "Schlage keine Titel aus der Merkliste oder der gesehenen Liste vor (auch nicht in leicht abweichender Schreibweise oder als bereits gesehene Staffel/Reihe).",
     "Wunsch/Stimmung: " + mood + ".",
