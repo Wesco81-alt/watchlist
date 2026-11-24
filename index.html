@@ -22,6 +22,7 @@
   <script src="./gemini.js?v=dev" defer></script>
   <script src="./recommendation-count-fix.js?v=dev" defer></script>
   <script src="./app.js?v=dev" defer></script>
+  <script src="./recommendation-rating.js?v=dev" defer></script>
 </head>
 <body>
   <header>
@@ -34,6 +35,7 @@
       <button type="button" class="nav-btn" data-view="watchlistView">Merkliste (<span id="watchlistCount">0</span>)</button>
       <button type="button" class="nav-btn" data-view="seenView">Gesehen (<span id="seenCount">0</span>)</button>
       <button type="button" class="nav-btn" data-view="providersView">Anbieter (<span id="activeProvidersCount">0</span>)</button>
+      <button type="button" class="nav-btn" data-view="historyView">Historie (<span id="historyCount">0</span>)</button>
       <button type="button" class="nav-btn" data-view="apiView">API &amp; Debug</button>
     </nav>
   </header>
@@ -128,6 +130,22 @@
           <button id="clearProvidersBtn" type="button" class="secondary">Alle abwählen</button>
         </div>
         <div id="providerToggleGrid" class="provider-grid"></div>
+      </section>
+    </div>
+
+    <div id="historyView" class="view">
+      <section class="card">
+        <div class="rec-head">
+          <div>
+            <h2 style="margin-bottom: 4px;">Empfehlungs-Historie</h2>
+            <div class="meta">Kürzlich vorgeschlagene Titel (60 Tage Wiederholungsschutz, max. 500 Einträge).</div>
+          </div>
+          <button id="clearHistoryBtn" type="button" class="secondary">Historie leeren</button>
+        </div>
+        <div class="row" style="margin-top: 12px;">
+          <input id="historyFilterInput" type="search" placeholder="Historie nach Titel, Typ, Anbieter oder Cluster filtern..." aria-label="Historie filtern" />
+        </div>
+        <div class="list" id="recommendationHistoryContainer"></div>
       </section>
     </div>
 
