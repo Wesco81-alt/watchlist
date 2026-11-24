@@ -72,7 +72,7 @@
             <option value="Alle">Alle Bewertungen</option>
             <option value="Finde ich super">👍👍 Finde ich super</option>
             <option value="Gefällt mir">👍 Gefällt mir</option>
-            <option value="Nicht gefällt mir">👎 Nicht gefällt mir</option>
+            <option value="Gefällt mir nicht">👎 Gefällt mir nicht</option>
             <option value="Ohne Bewertung">Ohne Bewertung</option>
           </select>
         </div>
@@ -106,7 +106,7 @@
             <option value="Alle">Alle Bewertungen</option>
             <option value="Finde ich super">👍👍 Finde ich super</option>
             <option value="Gefällt mir">👍 Gefällt mir</option>
-            <option value="Nicht gefällt mir">👎 Nicht gefällt mir</option>
+            <option value="Gefällt mir nicht">👎 Gefällt mir nicht</option>
             <option value="Ohne Bewertung">Ohne Bewertung</option>
           </select>
           <select id="seenTypeFilter" aria-label="Gesehene Titel nach Typ filtern">
@@ -175,7 +175,7 @@
 
       <section class="card">
         <h2>Bewertungen importieren (Netflix Ratings.csv oder JSON)</h2>
-        <div class="meta">Wähle deine <code>Ratings.csv</code> (oder ein JSON) aus. <code>Thumbs Value</code> wird automatisch gemappt: <code>1</code> = 👎 Nicht gefällt mir, <code>2</code> = 👍 Gefällt mir, <code>3</code> = 👍👍 Finde ich super.</div>
+        <div class="meta">Wähle deine <code>Ratings.csv</code> (oder ein JSON) aus. <code>Thumbs Value</code> wird automatisch gemappt: <code>1</code> = 👎 Gefällt mir nicht, <code>2</code> = 👍 Gefällt mir, <code>3</code> = 👍👍 Finde ich super.</div>
         <div class="row" style="margin-top:10px;"><input id="ratingsImportFileInput" type="file" accept=".csv,.json,text/csv,application/json" aria-label="CSV- oder JSON-Datei für Bewertungen auswählen" /></div>
         <div class="row" style="margin-top:10px;"><textarea id="ratingsImportTextarea" rows="6" placeholder="Ratings.csv-Inhalt oder JSON hier einfügen..." style="width:100%;font-family:monospace;font-size:12px;"></textarea></div>
         <label class="check-row" style="margin-top:8px;"><input id="addRatedToSeenToggle" type="checkbox" checked /><span>Bewertete Titel automatisch auch in die „Gesehen“-Liste aufnehmen, falls noch nicht vorhanden</span></label>
