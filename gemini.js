@@ -72,7 +72,18 @@ function initializeRecommendationCountSetting() {
 function loadRecommendationHistory() {
   try {
     const parsed = JSON.parse(localStorage.getItem(RECOMMENDATION_HISTORY_STORAGE) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((entry) => entry && entry.title && entry.suggestedAt) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry) => entry && entry.title && entry.suggestedAt)
+      .map((entry) => ({
+        title: normalizeSuggestedTitle(entry.title),
+        suggestedAt: entry.suggestedAt,
+        type: entry.type ? normalizeMediaType(entry.type, entry) : null,
+        year: entry.year ? stripMarkdown(entry.year) : "",
+        provider: entry.provider ? normalizeProvider(entry.provider) : "",
+        cluster: entry.cluster ? stripMarkdown(entry.cluster) : "",
+        feedback: entry.feedback ?? null
+      }));
   } catch {
     return [];
   }
@@ -88,6 +99,12 @@ function saveRecommendationHistory(history) {
     .sort((a, b) => String(b.suggestedAt).localeCompare(String(a.suggestedAt)))
     .slice(0, RECOMMENDATION_HISTORY_MAX);
   localStorage.setItem(RECOMMENDATION_HISTORY_STORAGE, JSON.stringify(trimmed));
+}
+
+function updateHistoryBadgeCount(count) {
+  const total = typeof count === "number" ? count : loadRecommendationHistory().length;
+  const badge = document.getElementById("historyCount") || document.getElementById("historyCountBadge");
+  if (badge) badge.textContent = String(total);
 }
 
 function getRecentRecommendationTitles() {
@@ -106,15 +123,223 @@ function recordRecommendations(recs) {
     const title = normalizeSuggestedTitle(rec?.title || "");
     const key = titleKey(title);
     if (!key) return;
+    const mediaType = rec?.type ? normalizeMediaType(rec.type, rec) : null;
+    const year = rec?.year ? stripMarkdown(rec.year) : "";
+    const provider = rec?.provider ? normalizeProvider(rec.provider) : "";
+    const cluster = rec?.cluster ? stripMarkdown(rec.cluster) : "";
+
     const existingIndex = history.findIndex((entry) => titleKey(entry.title) === key);
-    if (existingIndex >= 0) history[existingIndex].suggestedAt = now;
-    else {
-      history.unshift({ title, suggestedAt: now, feedback: null });
+    if (existingIndex >= 0) {
+      history[existingIndex] = {
+        ...history[existingIndex],
+        title,
+        suggestedAt: now,
+        type: mediaType || history[existingIndex].type || null,
+        year: year || history[existingIndex].year || "",
+        provider: provider || history[existingIndex].provider || "",
+        cluster: cluster || history[existingIndex].cluster || ""
+      };
+    } else {
+      history.unshift({
+        title,
+        suggestedAt: now,
+        type: mediaType,
+        year,
+        provider,
+        cluster,
+        feedback: null
+      });
       added += 1;
     }
   });
   saveRecommendationHistory(history);
+  renderRecommendationHistoryView();
   return added || (recs.length > 0 ? recs.length : 0);
+}
+
+function removeRecommendationHistoryEntry(title) {
+  const targetKey = titleKey(title);
+  if (!targetKey) return;
+  const next = loadRecommendationHistory().filter((entry) => titleKey(entry.title) !== targetKey);
+  saveRecommendationHistory(next);
+  renderRecommendationHistoryView();
+}
+
+function clearRecommendationHistory() {
+  localStorage.removeItem(RECOMMENDATION_HISTORY_STORAGE);
+  renderRecommendationHistoryView();
+}
+
+function formatHistoryDate(isoStr) {
+  const date = new Date(isoStr);
+  if (Number.isNaN(date.getTime())) return String(isoStr || "");
+  return date.toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function isWithinCooldown(isoStr) {
+  const ts = new Date(isoStr).getTime();
+  if (!Number.isFinite(ts)) return false;
+  return ts >= Date.now() - RECOMMENDATION_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+}
+
+function renderRecommendationHistoryView() {
+  const container = document.getElementById("recommendationHistoryContainer");
+  const filterInput = document.getElementById("historyFilterInput");
+  const history = loadRecommendationHistory();
+  updateHistoryBadgeCount(history.length);
+  if (!container) return;
+
+  const query = String(filterInput?.value || "").trim().toLocaleLowerCase("de-DE");
+  const filtered = query
+    ? history.filter((entry) => {
+        const haystack = [
+          entry.title,
+          entry.type,
+          entry.year,
+          entry.provider,
+          entry.cluster
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase("de-DE");
+        return haystack.includes(query);
+      })
+    : history;
+
+  container.innerHTML = "";
+  if (filtered.length === 0) {
+    container.innerHTML =
+      '<div class="meta">' +
+      (history.length === 0
+        ? "Noch keine KI-Empfehlungen in der Historie gespeichert."
+        : "Keine Historien-Einträge passend zum Suchfilter gefunden.") +
+      "</div>";
+    return;
+  }
+
+  filtered.forEach((entry) => {
+    const activeCooldown = isWithinCooldown(entry.suggestedAt);
+    const row = document.createElement("div");
+    row.className = "item";
+
+    const info = document.createElement("div");
+    const badges = [
+      entry.type ? '<span class="type-pill">' + escapeHtml(entry.type) + "</span>" : "",
+      entry.provider ? '<span class="provider-pill">' + escapeHtml(entry.provider) + "</span>" : "",
+      entry.cluster ? '<span class="avail-pill">' + escapeHtml(entry.cluster) + "</span>" : "",
+      activeCooldown
+        ? '<span class="avail-pill">Sperre aktiv (' + RECOMMENDATION_COOLDOWN_DAYS + "d)</span>"
+        : '<span class="meta">Sperre abgelaufen</span>'
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    info.innerHTML =
+      "<div>" +
+        "<strong>" + escapeHtml(entry.title) + "</strong>" +
+        (entry.year ? " (" + escapeHtml(entry.year) + ")" : "") +
+        " " + badges +
+      "</div>" +
+      '<div class="meta">Vorgeschlagen am ' + escapeHtml(formatHistoryDate(entry.suggestedAt)) + "</div>";
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "unseen-btn";
+    removeBtn.textContent = "✕";
+    removeBtn.title = "Titel aus der Historie entfernen";
+    removeBtn.setAttribute("aria-label", "Titel aus der Historie entfernen: " + entry.title);
+    removeBtn.addEventListener("click", () => {
+      removeRecommendationHistoryEntry(entry.title);
+    });
+
+    actions.append(removeBtn);
+    row.append(info, actions);
+    container.append(row);
+  });
+}
+
+function initializeHistoryView() {
+  const nav = document.querySelector("nav.menu-bar") || document.querySelector("nav");
+  let historyBtn = document.querySelector('.nav-btn[data-view="historyView"]');
+  if (!historyBtn && nav) {
+    historyBtn = document.createElement("button");
+    historyBtn.type = "button";
+    historyBtn.className = "nav-btn";
+    historyBtn.dataset.view = "historyView";
+    historyBtn.innerHTML = 'Historie (<span id="historyCount">0</span>)';
+    const apiBtn = nav.querySelector('.nav-btn[data-view="apiView"]');
+    if (apiBtn) nav.insertBefore(historyBtn, apiBtn);
+    else nav.append(historyBtn);
+  }
+
+  let historyView = document.getElementById("historyView");
+  if (!historyView) {
+    const mainEl = document.querySelector("main") || document.body;
+    historyView = document.createElement("div");
+    historyView.id = "historyView";
+    historyView.className = "view";
+    historyView.innerHTML =
+      '<section class="card">' +
+        '<div class="rec-head">' +
+          "<div>" +
+            '<h2 style="margin-bottom:4px;">Empfehlungs-Historie</h2>' +
+            '<div class="meta">Kürzlich vorgeschlagene Titel (Wiederholungsschutz: ' +
+              RECOMMENDATION_COOLDOWN_DAYS +
+              " Tage, max. " +
+              RECOMMENDATION_HISTORY_MAX +
+              " Einträge).</div>" +
+          "</div>" +
+          '<button id="clearHistoryBtn" type="button" class="secondary">Historie leeren</button>' +
+        "</div>" +
+        '<div class="row" style="margin-top:12px;">' +
+          '<input id="historyFilterInput" type="search" placeholder="Historie nach Titel, Typ, Anbieter oder Cluster filtern..." aria-label="Historie filtern" />' +
+        "</div>" +
+        '<div class="list" id="recommendationHistoryContainer"></div>' +
+      "</section>";
+    mainEl.append(historyView);
+  }
+
+  if (historyBtn && !historyBtn.dataset.historyBound) {
+    historyBtn.dataset.historyBound = "true";
+    historyBtn.addEventListener("click", () => {
+      if (typeof switchView === "function") {
+        switchView("historyView");
+      } else {
+        const allViews = Array.from(document.querySelectorAll(".view"));
+        const allNavButtons = Array.from(document.querySelectorAll(".nav-btn"));
+        allViews.forEach((v) => v.classList.toggle("active", v.id === "historyView"));
+        allNavButtons.forEach((b) => b.classList.toggle("active", b.dataset.view === "historyView"));
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      renderRecommendationHistoryView();
+    });
+  }
+
+  const filterInput = document.getElementById("historyFilterInput");
+  if (filterInput && !filterInput.dataset.historyBound) {
+    filterInput.dataset.historyBound = "true";
+    filterInput.addEventListener("input", renderRecommendationHistoryView);
+  }
+
+  const clearBtn = document.getElementById("clearHistoryBtn");
+  if (clearBtn && !clearBtn.dataset.historyBound) {
+    clearBtn.dataset.historyBound = "true";
+    clearBtn.addEventListener("click", () => {
+      if (loadRecommendationHistory().length === 0) return;
+      clearRecommendationHistory();
+    });
+  }
+
+  renderRecommendationHistoryView();
 }
 
 function buildAvailabilityCheckUrl(title, provider) {
@@ -411,3 +636,4 @@ async function fetchGeminiRecommendations({ apiKey, mood, availMode, searchEnabl
 }
 
 initializeRecommendationCountSetting();
+initializeHistoryView();
