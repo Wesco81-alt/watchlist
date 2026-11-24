@@ -21,7 +21,7 @@ const PROVIDERS = [
   "Sonstiges"
 ];
 const MEDIATHEK_FREE_PROVIDERS = ["ARD", "ZDF", "Tresat", "Joyn", "Netzkino"];
-const RATINGS = ["Nicht gefällt mir", "Gefällt mir", "Finde ich super"];
+const RATINGS = ["Gefällt mir nicht", "Gefällt mir", "Finde ich super"];
 
 const navButtons = Array.from(document.querySelectorAll(".nav-btn"));
 const views = Array.from(document.querySelectorAll(".view"));
@@ -74,6 +74,11 @@ const clearDebugBtn = document.getElementById("clearDebugBtn");
 const appVersionInfoEl = document.getElementById("appVersionInfo");
 
 let debugLines = [];
+
+function normalizeRatingLabel(val) {
+  if (val === "Nicht gefällt mir") return "Gefällt mir nicht";
+  return RATINGS.includes(val) ? val : null;
+}
 
 function renderVersionInfo() {
   if (appVersionInfoEl) {
@@ -140,14 +145,17 @@ function saveSeenRatings() {
 function loadSeenRatings() {
   const raw = localStorage.getItem(SEEN_RATINGS_STORAGE);
   const map = {};
+  let migrated = false;
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         Object.entries(parsed).forEach(([k, v]) => {
           const key = stripMarkdown(k).toLowerCase();
-          if (key && RATINGS.includes(v)) {
-            map[key] = v;
+          const normalized = normalizeRatingLabel(v);
+          if (key && normalized) {
+            if (v !== normalized) migrated = true;
+            map[key] = normalized;
           }
         });
       }
@@ -158,22 +166,28 @@ function loadSeenRatings() {
   if (Array.isArray(items)) {
     items.forEach((it) => {
       const key = stripMarkdown(it.title || "").toLowerCase();
-      if (key && RATINGS.includes(it.rating) && !map[key]) {
-        map[key] = it.rating;
+      const normalized = normalizeRatingLabel(it.rating);
+      if (key && normalized && !map[key]) {
+        map[key] = normalized;
       }
     });
+  }
+  if (migrated) {
+    localStorage.setItem(SEEN_RATINGS_STORAGE, JSON.stringify(map));
   }
   return map;
 }
 
 function getTitleRating(title) {
   const key = stripMarkdown(title).toLowerCase();
-  if (key && RATINGS.includes(seenRatings[key])) {
-    return seenRatings[key];
+  const rated = normalizeRatingLabel(seenRatings[key]);
+  if (key && rated) {
+    return rated;
   }
   const watchMatch = items.find((i) => stripMarkdown(i.title || "").toLowerCase() === key);
-  if (watchMatch && RATINGS.includes(watchMatch.rating)) {
-    return watchMatch.rating;
+  const watchRating = normalizeRatingLabel(watchMatch?.rating);
+  if (watchMatch && watchRating) {
+    return watchRating;
   }
   return null;
 }
@@ -183,7 +197,7 @@ function setTitleRating(title, nextRating) {
   const key = clean.toLowerCase();
   if (!key) return;
 
-  const validRating = RATINGS.includes(nextRating) ? nextRating : null;
+  const validRating = normalizeRatingLabel(nextRating);
   if (validRating) {
     seenRatings[key] = validRating;
   } else {
@@ -271,8 +285,9 @@ function markTitleAsSeen(title, mediaType = null) {
   const lower = clean.toLowerCase();
   const existingItem = items.find((entry) => stripMarkdown(entry.title).toLowerCase() === lower);
   const resolvedType = mediaType || existingItem?.type || null;
-  if (existingItem && RATINGS.includes(existingItem.rating) && !seenRatings[lower]) {
-    seenRatings[lower] = existingItem.rating;
+  const normalizedItemRating = normalizeRatingLabel(existingItem?.rating);
+  if (existingItem && normalizedItemRating && !seenRatings[lower]) {
+    seenRatings[lower] = normalizedItemRating;
     saveSeenRatings();
   }
   addSeenEntry(clean, resolvedType);
@@ -428,15 +443,16 @@ function normalizeMediaType(raw, rec = {}) {
 }
 
 function getRatingIcon(rating) {
-  if (rating === "Finde ich super") return "👍👍";
-  if (rating === "Gefällt mir") return "👍";
-  if (rating === "Nicht gefällt mir") return "👎";
+  const normalized = normalizeRatingLabel(rating);
+  if (normalized === "Finde ich super") return "👍👍";
+  if (normalized === "Gefällt mir") return "👍";
+  if (normalized === "Gefällt mir nicht") return "👎";
   return "";
 }
 
 function mapThumbsValueToRating(val) {
   const num = Number(String(val ?? "").trim());
-  if (num === 1) return "Nicht gefällt mir";
+  if (num === 1) return "Gefällt mir nicht";
   if (num === 2) return "Gefällt mir";
   if (num === 3) return "Finde ich super";
   return null;
@@ -445,19 +461,21 @@ function mapThumbsValueToRating(val) {
 function addToWatchlist(title, provider, rating = null, mediaType = null) {
   const cleanTitle = stripMarkdown(title);
   if (!cleanTitle) return;
+  const normalizedRating = normalizeRatingLabel(rating);
   items.unshift({
     id: crypto.randomUUID(),
     title: cleanTitle,
     type: mediaType ? normalizeMediaType(mediaType) : null,
     provider: normalizeProvider(provider),
-    rating: RATINGS.includes(rating) ? rating : null
+    rating: normalizedRating
   });
   saveItems();
   renderList();
 }
 
 function setItemRating(item, nextRating) {
-  const resolved = item.rating === nextRating ? null : nextRating;
+  const current = normalizeRatingLabel(item.rating);
+  const resolved = current === nextRating ? null : nextRating;
   item.rating = resolved;
   const key = stripMarkdown(item.title || "").toLowerCase();
   if (key) {
@@ -476,9 +494,10 @@ function setItemRating(item, nextRating) {
 function createRatingControls(currentRating, onSelect) {
   const group = document.createElement("div");
   group.className = "rating-group";
+  const activeRating = normalizeRatingLabel(currentRating);
 
   const configs = [
-    { value: "Nicht gefällt mir", icon: "👎", label: "Nicht gefällt mir", activeClass: "selected-dislike" },
+    { value: "Gefällt mir nicht", icon: "👎", label: "Gefällt mir nicht", activeClass: "selected-dislike" },
     { value: "Gefällt mir", icon: "👍", label: "Gefällt mir", activeClass: "selected-like" },
     { value: "Finde ich super", icon: "👍👍", label: "Finde ich super", activeClass: "selected-super" }
   ];
@@ -487,7 +506,7 @@ function createRatingControls(currentRating, onSelect) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "rate-btn";
-    if (currentRating === cfg.value) {
+    if (activeRating === cfg.value) {
       btn.classList.add(cfg.activeClass);
     }
     btn.textContent = cfg.icon;
@@ -596,11 +615,12 @@ function renderList() {
 
   const filtered = items.filter((item) => {
     const providerMatch = selectedProvider === "Alle" || item.provider === selectedProvider;
+    const itemRating = normalizeRatingLabel(item.rating);
     let ratingMatch = true;
     if (selectedRating === "Ohne Bewertung") {
-      ratingMatch = !item.rating;
+      ratingMatch = !itemRating;
     } else if (selectedRating !== "Alle") {
-      ratingMatch = item.rating === selectedRating;
+      ratingMatch = itemRating === selectedRating;
     }
     return providerMatch && ratingMatch;
   });
@@ -613,7 +633,7 @@ function renderList() {
 
   filtered.forEach((item) => {
     const providerName = PROVIDERS.includes(item.provider) ? item.provider : "Sonstiges";
-    const currentRating = RATINGS.includes(item.rating) ? item.rating : null;
+    const currentRating = normalizeRatingLabel(item.rating);
     const typeBadge = item.type
       ? '<span class="type-pill">' + escapeHtml(item.type) + "</span>"
       : "";
@@ -847,9 +867,8 @@ function parseNetflixRatingsPayload(rawText) {
     const map = new Map();
     list.forEach((entry) => {
       const title = stripMarkdown(entry?.title || entry?.["Title Name"] || "");
-      const rating = RATINGS.includes(entry?.rating)
-        ? entry.rating
-        : mapThumbsValueToRating(entry?.thumbsValue ?? entry?.["Thumbs Value"]);
+      const rating = normalizeRatingLabel(entry?.rating) ||
+        mapThumbsValueToRating(entry?.thumbsValue ?? entry?.["Thumbs Value"]);
       const type = entry?.type ? normalizeMediaType(entry.type) : null;
       if (title && rating) {
         map.set(title.toLowerCase(), { title, rating, type });
@@ -1109,7 +1128,8 @@ recommendBtn.addEventListener("click", async () => {
 
   const titles = items
     .map((i) => {
-      const meta = [i.type, i.provider || "Sonstiges", i.rating ? "Bewertung: " + i.rating : null]
+      const r = normalizeRatingLabel(i.rating);
+      const meta = [i.type, i.provider || "Sonstiges", r ? "Bewertung: " + r : null]
         .filter(Boolean)
         .join(", ");
       return i.title + (meta ? " [" + meta + "]" : "");
@@ -1129,13 +1149,13 @@ recommendBtn.addEventListener("click", async () => {
     const label = e.type ? cleanTitle + " (" + e.type + ")" : cleanTitle;
     if (r === "Finde ich super") superLiked.push(label);
     else if (r === "Gefällt mir") liked.push(label);
-    else if (r === "Nicht gefällt mir") disliked.push(label);
+    else if (r === "Gefällt mir nicht") disliked.push(label);
   });
 
   const seenListText = [
     "Finde ich super: " + (superLiked.length > 0 ? superLiked.join(", ") : "keine"),
     "Gefällt mir: " + (liked.length > 0 ? liked.join(", ") : "keine"),
-    "Nicht gefällt mir: " + (disliked.length > 0 ? disliked.join(", ") : "keine"),
+    "Gefällt mir nicht: " + (disliked.length > 0 ? disliked.join(", ") : "keine"),
     "Alle gesehenen Titel (streng ausschließen): " + (allSeenTitles.length > 0 ? allSeenTitles.join(", ") : "keine")
   ].join(" | ");
 
@@ -1165,6 +1185,19 @@ if (!Array.isArray(items) || items.length === 0) {
     { id: crypto.randomUUID(), title: "Tatort", type: "Serie", provider: "ARD", rating: "Gefällt mir" }
   ];
   saveItems();
+} else {
+  let itemsMigrated = false;
+  items = items.map((it) => {
+    const normalized = normalizeRatingLabel(it.rating);
+    if (it.rating && normalized && it.rating !== normalized) {
+      itemsMigrated = true;
+      return { ...it, rating: normalized };
+    }
+    return it;
+  });
+  if (itemsMigrated) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  }
 }
 
 function loadSeenEntries() {
