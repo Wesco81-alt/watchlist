@@ -84,6 +84,9 @@ function renderVersionInfo() {
 function switchView(viewId) {
   views.forEach((v) => v.classList.toggle("active", v.id === viewId));
   navButtons.forEach((b) => b.classList.toggle("active", b.dataset.view === viewId));
+  if (viewId === "historyView" && typeof renderRecommendationHistoryView === "function") {
+    renderRecommendationHistoryView();
+  }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -1220,6 +1223,9 @@ if (!Array.isArray(enabledProviders)) {
 
 renderVersionInfo();
 seenCountEl.textContent = String(seenEntries.length);
+if (typeof updateHistoryBadgeCount === "function") {
+  updateHistoryBadgeCount();
+}
 updateApiBadge();
 syncProviderSelects();
 renderProviderToggles();
