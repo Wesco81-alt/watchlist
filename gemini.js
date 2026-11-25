@@ -398,25 +398,26 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
     ? "Kontext-Hinweis (nur als grobe Richtung, keine Verfügbarkeits-Vorhersage): " + availMode + "."
     : "";
   const searchInstruction = searchEnabled
-    ? "Nutze die Google-Suche nur zur Faktenprüfung von Titel, Erscheinungsjahr, Laufzeit, Inhalt und Hauptdarstellern – nicht, um eine garantierte aktuelle Streaming-Verfügbarkeit zu behaupten."
+    ? "Nutze die Google-Suche nur zur Faktenprüfung von offiziellem deutschen Verleihtitel, Erscheinungsjahr, Laufzeit, Inhalt und Hauptdarstellern – nicht, um eine garantierte aktuelle Streaming-Verfügbarkeit zu behaupten."
     : "Verzichte auf Spekulationen über aktuelle Streaming-Rechte oder Katalog-Verfügbarkeiten; setze bei 'availability' ehrlich 'Anbieter prüfen', wenn kein fester Sender/Katalog sicher ist.";
 
   return [
-    "Du bist ein feinsinniger Film- und Serien-Kurator für Deutschland.",
-    "Dein Hauptauftrag ist NICHT die Vorhersage von Streaming-Verfügbarkeiten, sondern treffsichere Empfehlungen auf Basis des Sehverlaufs, der Bewertungen und einer sinnvollen thematischen, atmosphärischen oder dramaturgischen Clusterbildung.",
-    "Aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
-    "Gesehene Titel & Bewertungen (" + seenListText + ").",
-    "Geschmacksprofil & Gewichtung: Nutze vor allem 'Finde ich super' als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve und Themen. Beziehe 'Gefällt mir' positiv ein und vermeide 'Gefällt mir nicht' sowie direkte inhaltliche oder stilistische Kopien davon.",
+    "Du bist mein persönlicher Film- und Serien-Kurator in Deutschland und sprichst mich direkt mit 'du' an.",
+    "Dein Hauptauftrag ist NICHT die Vorhersage von Streaming-Verfügbarkeiten, sondern treffsichere Empfehlungen auf Basis meiner bisherigen Sehgewohnheiten, meiner Bewertungen und einer sinnvollen thematischen, atmosphärischen oder dramaturgischen Clusterbildung.",
+    "Meine aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
+    "Meine gesehenen Titel & Bewertungen (" + seenListText + ").",
+    "Mein Geschmacksprofil & Gewichtung: Nutze vor allem meine mit 'Finde ich super' bewerteten Titel als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve und Themen. Beziehe 'Gefällt mir' positiv ein und vermeide 'Gefällt mir nicht' sowie direkte inhaltliche oder stilistische Kopien davon.",
     repeatInstruction,
-    "Schlage keine Titel aus der Merkliste oder der gesehenen Liste vor (auch nicht in leicht abweichender Schreibweise oder als bereits gesehene Staffel/Reihe).",
-    "Wunsch/Stimmung: " + mood + ".",
+    "Schlage keine Titel aus meiner Merkliste oder meiner gesehenen Liste vor (auch nicht in leicht abweichender Schreibweise oder als bereits gesehene Staffel/Reihe).",
+    "Mein Wunsch/meine Stimmung heute: " + mood + ".",
     focusHint,
     providerHint,
     searchInstruction,
-    "Wichtig für 'cluster' und 'clusterDesc': Gruppiere die Empfehlungen in sinnvolle inhaltliche, atmosphärische oder dramaturgische Cluster. Formuliere 'cluster' als pointierte Überschrift mit maximal 3 bis 5 Wörtern (z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als knappe, prägnante Clusterbeschreibung in 1 bis 2 kurzen Sätzen zum gemeinsamen Kern der Titel.",
-    "Wichtig für 'reason': Schreibe in 'reason' eine klare, gut lesbare Begründung in 3 bis 5 Sätzen. Verzichte komplett auf technische Ausführungen zu Bildsprache, Kameraführung, Schnitt oder Sounddesign. Gehe stattdessen direkt im fließenden Text auf drei Dinge ein: (1) eine kurze Beschreibung des Inhalts (ohne Spoiler), (2) die wichtigsten beteiligten Hauptdarsteller und (3) an welchen konkreten anderen Filmen oder Serien – insbesondere aus den positiv bewerteten Favoriten – sich die Empfehlung thematisch, tonal oder erzählerisch orientiert.",
+    "Sprache & Titelkonvention (sehr wichtig): Verwende sowohl im Feld 'title' als auch bei ALLEN Vergleichs- und Referenztiteln im Text konsequent die offiziellen deutschen Verleih- bzw. Sendetitel (so wie sie in Deutschland bei Netflix, ARD, ZDF, Sky oder im Kino laufen), niemals englische Originaltitel – es sei denn, ein Titel hat in Deutschland keinen eigenen deutschen Titel.",
+    "Wichtig für 'cluster' und 'clusterDesc': Gruppiere die Empfehlungen in sinnvolle inhaltliche, atmosphärische oder dramaturgische Cluster. Formuliere 'cluster' als pointierte deutsche Überschrift mit maximal 3 bis 5 Wörtern (z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als persönliche, knappe Clusterbeschreibung in 1 bis 2 kurzen Sätzen, die den gemeinsamen Kern direkt für mich auf den Punkt bringt.",
+    "Wichtig für 'reason': Schreibe in 'reason' eine persönliche, direkte und gut lesbare Empfehlung in 3 bis 5 Sätzen, in der du mich unmittelbar ansprichst ('du', 'dein', 'dir') statt abstrakt über 'den Zuschauer' oder 'das Publikum' zu reden. Verzichte komplett auf technische Ausführungen zu Bildsprache, Kameraführung, Schnitt oder Sounddesign. Gehe stattdessen im fließenden Text auf drei Dinge ein: (1) worum es in der Geschichte geht (kurz und ohne Spoiler), (2) welche bekannten Hauptdarsteller mitspielen und (3) warum der Titel konkret zu meinen Sehgewohnheiten und Bewertungen passt – nenne dabei mindestens einen konkreten deutschen Titel aus meinen mit 'Finde ich super' oder 'Gefällt mir' bewerteten Favoriten (oder aus meiner Merkliste) als persönlichen Ankerpunkt.",
     "Antworte auf Deutsch mit genau " + count + " konkreten Empfehlungen als reines JSON-Array ohne einleitenden oder abschließenden Text:",
-    '[{"cluster":"Pointierte Überschrift (3-5 Wörter)","clusterDesc":"Knappe Clusterbeschreibung in 1 bis 2 kurzen Sätzen.","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","availability":"z.B. Geschmacks-Match oder Anbieter prüfen","reason":"Kurze Inhaltsbeschreibung (spoilerfrei), Nennung der Hauptdarsteller sowie Einordnung, an welchen anderen Filmen oder Serien sich die Empfehlung orientiert (insgesamt 3 bis 5 Sätze)."}]'
+    '[{"cluster":"Pointierte deutsche Überschrift (3-5 Wörter)","clusterDesc":"Persönliche, knappe Clusterbeschreibung in 1 bis 2 kurzen Sätzen.","title":"Offizieller deutscher Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","availability":"z.B. Geschmacks-Match oder Anbieter prüfen","reason":"Persönliche, direkte Begründung (3 bis 5 Sätze) mit kurzer spoilerfreier Inhaltsbeschreibung, Nennung der Hauptdarsteller und klarem Bezug auf deine Sehgewohnheiten sowie konkrete positiv bewertete deutsche Titel aus deiner Liste."}]'
   ].join(" ");
 }
 
@@ -762,7 +763,7 @@ initializeHistoryView();
         if (!anchorTitle) {
           return {
             moodText: "Starke Favoriten-Richtung",
-            promptHint: "Orientier dich besonders eng an den bestbewerteten Titeln ('Finde ich super')."
+            promptHint: "Orientier dich besonders eng an meinen bestbewerteten Titeln ('Finde ich super')."
           };
         }
 
@@ -771,7 +772,7 @@ initializeHistoryView();
           promptHint:
             "Orientier dich ganz besonders an der Stimmung, Dramaturgie, Tonalität und den thematischen Referenzen von „" +
             anchorTitle +
-            "“ (bewertet mit 'Finde ich super'), ohne diesen Titel selbst vorzuschlagen."
+            "“ (von mir bewertet mit 'Finde ich super'), ohne diesen Titel selbst vorzuschlagen."
         };
       }
     },
@@ -779,7 +780,7 @@ initializeHistoryView();
       id: "fresh_angle",
       label: "Etwas Neues wagen",
       moodText: "Frischer Blickwinkel, überraschend aber passend",
-      promptHint: "Bringe bewusst eine frische thematische oder erzählerische Note ein, die zum Geschmack passt, aber nicht wie eine bloße Wiederholung wirkt."
+      promptHint: "Bringe bewusst eine frische thematische oder erzählerische Note ein, die zu meinem Geschmack passt, aber nicht wie eine bloße Wiederholung wirkt."
     },
     {
       id: "under_two_hours",
@@ -809,7 +810,7 @@ initializeHistoryView();
       id: "watchlist_gems",
       label: "Versteckte Perlen aus der Merkliste",
       moodText: "Passende Auswahl aus der bestehenden Merkliste",
-      promptHint: "Wähle vorrangig passende Titel aus der bereits vorhandenen 'Aktuellen Merkliste' aus (sofern Einträge vorhanden sind) und begründe, warum gerade sie zum Wunsch und Geschmacksprofil passen."
+      promptHint: "Wähle vorrangig passende Titel aus meiner bereits vorhandenen 'Aktuellen Merkliste' aus (sofern Einträge vorhanden sind) und begründe persönlich, warum gerade sie zu meinem Wunsch und Geschmacksprofil passen."
     }
   ];
 
@@ -914,11 +915,11 @@ initializeHistoryView();
       moreBtn.textContent = "Mehr wie dieses Cluster";
       moreBtn.addEventListener("click", () => {
         const hint =
-          "Schlage weitere Titel im Cluster-Stil „" +
+          "Schlage weitere deutsche Titel im Cluster-Stil „" +
           clusterName +
           "“ vor" +
           (clusterDesc ? " (" + clusterDesc + ")" : "") +
-          ".";
+          " und beziehe sie persönlich auf meine Bewertungen.";
         triggerFollowUpRecommendation(hint, "Suche weitere Titel passend zu „" + clusterName + "“...");
       });
 
@@ -930,7 +931,7 @@ initializeHistoryView();
         const hint =
           "Bleib grob in der Richtung von „" +
           clusterName +
-          "“, aber wähle ruhigere, bedachtere und düsterere Stoffe mit weniger Hektik.";
+          "“, aber wähle ruhigere, bedachtere und düsterere Stoffe mit weniger Hektik und deutschen Verleihtiteln.";
         triggerFollowUpRecommendation(hint, "Suche ruhigere, düsterere Titel zu „" + clusterName + "“...");
       });
 
@@ -1006,13 +1007,13 @@ initializeHistoryView();
     const sampleWatchlist = watchlist.slice(0, 10).map((i) => String(i?.title || "").trim()).filter(Boolean);
 
     return [
-      "Du bist ein Kurator für Filme und Serien in Deutschland.",
-      "Erzeuge " + count + " abwechslungsreiche, kreative Schnell-Preset-Buttons für die Stimmungssuche eines Nutzers.",
+      "Du bist mein persönlicher Kurator für Filme und Serien in Deutschland.",
+      "Erzeuge " + count + " abwechslungsreiche, kreative Schnell-Preset-Buttons für meine Stimmungssuche.",
       "Zufalls-Impuls für diese Runde: " + seed + " (Zufallszahl: " + Math.floor(Math.random() * 10000) + ").",
-      "Top-Favoriten ('Finde ich super'): " + (superTitles.length ? superTitles.join(", ") : "keine angegeben") + ".",
+      "Meine Top-Favoriten ('Finde ich super'): " + (superTitles.length ? superTitles.join(", ") : "keine angegeben") + ".",
       "Vermeiden ('Gefällt mir nicht'): " + (dislikedTitles.length ? dislikedTitles.join(", ") : "keine angegeben") + ".",
-      "Aus der Merkliste: " + (sampleWatchlist.length ? sampleWatchlist.join(", ") : "keine angegeben") + ".",
-      "Regeln: Jedes Preset braucht ein kurzes, prägnantes 'label' (max. 2–4 Wörter auf Deutsch), einen klaren 'moodText' (1 kurzer Satz für das Suchfeld) und einen konkreten 'promptHint' (1–2 Sätze als Steuerungs-Hinweis für spätere Empfehlungen, ohne technische Kamera-/Ton-Begriffe).",
+      "Aus meiner Merkliste: " + (sampleWatchlist.length ? sampleWatchlist.join(", ") : "keine angegeben") + ".",
+      "Regeln: Jedes Preset braucht ein kurzes, prägnantes 'label' (max. 2–4 Wörter auf Deutsch), einen klaren 'moodText' (1 kurzer Satz für das Suchfeld) und einen konkreten 'promptHint' (1–2 Sätze als Steuerungs-Hinweis für spätere Empfehlungen, ohne technische Kamera-/Ton-Begriffe, mit Fokus auf deutsche Titel und meine Sehgewohnheiten).",
       "Antworte ausschließlich als reines JSON-Array ohne Markdown oder Zusatztext:",
       '[{"label":"Kurz-Label","moodText":"Kurzer Stimmungstext","promptHint":"Konkreter Steuerungs-Hinweis für Empfehlungen."}]'
     ].join(" ");
