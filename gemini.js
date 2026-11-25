@@ -430,7 +430,7 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
     : "";
   const searchInstruction = searchEnabled
     ? "Nutze die Google-Suche nur zur Faktenprüfung von offiziellem deutschen Verleihtitel, Erscheinungsjahr, Laufzeit, Inhalt und Hauptdarstellern – nicht, um eine garantierte aktuelle Streaming-Verfügbarkeit zu behaupten."
-    : "Verzichte auf Spekulationen über aktuelle Streaming-Rechte oder Katalog-Verfügbarkeiten; setze bei 'availability' ehrlich 'Anbieter prüfen', wenn kein fester Sender/Katalog sicher ist.";
+    : "Verzichte auf Spekulationen über aktuelle Streaming-Rechte oder Katalog-Verfügbarkeiten und lass das Feld 'availability' weg.";
 
   return [
     "Du bist mein persönlicher Film- und Serien-Kurator in Deutschland und sprichst mich direkt mit 'du' an.",
@@ -448,22 +448,141 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
     "Wichtig für 'cluster' und 'clusterDesc': Gruppiere die Empfehlungen in sinnvolle inhaltliche, atmosphärische oder dramaturgische Cluster. Formuliere 'cluster' als pointierte deutsche Überschrift mit maximal 3 bis 5 Wörtern (z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als persönliche, knappe Clusterbeschreibung in 1 bis 2 kurzen Sätzen, die den gemeinsamen Kern direkt für mich auf den Punkt bringt.",
     "Wichtig für 'reason': Schreibe in 'reason' eine persönliche, direkte und gut lesbare Empfehlung in 3 bis 5 Sätzen, in der du mich unmittelbar ansprichst ('du', 'dein', 'dir') statt abstrakt über 'den Zuschauer' oder 'das Publikum' zu reden. Verzichte komplett auf technische Ausführungen zu Bildsprache, Kameraführung, Schnitt oder Sounddesign. Gehe stattdessen im fließenden Text auf drei Dinge ein: (1) worum es in der Geschichte geht (kurz und ohne Spoiler), (2) welche bekannten Hauptdarsteller mitspielen und (3) warum der Titel konkret zu meinen Sehgewohnheiten und Bewertungen passt – nenne dabei mindestens einen konkreten deutschen Titel aus meinen mit 'Finde ich super' oder 'Gefällt mir' bewerteten Favoriten (oder aus meiner Merkliste) als persönlichen Ankerpunkt.",
     "Antworte auf Deutsch mit genau " + count + " konkreten Empfehlungen als reines JSON-Array ohne einleitenden oder abschließenden Text:",
-    '[{"cluster":"Pointierte deutsche Überschrift (3-5 Wörter)","clusterDesc":"Persönliche, knappe Clusterbeschreibung in 1 bis 2 kurzen Sätzen.","title":"Offizieller deutscher Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","availability":"z.B. Geschmacks-Match oder Anbieter prüfen","reason":"Persönliche, direkte Begründung (3 bis 5 Sätze) mit kurzer spoilerfreier Inhaltsbeschreibung, Nennung der Hauptdarsteller und klarem Bezug auf deine Sehgewohnheiten sowie konkrete positiv bewertete deutsche Titel aus deiner Liste."}]'
+    '[{"cluster":"Pointierte deutsche Überschrift (3-5 Wörter)","clusterDesc":"Persönliche, knappe Clusterbeschreibung in 1 bis 2 kurzen Sätzen.","title":"Offizieller deutscher Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","reason":"Persönliche, direkte Begründung (3 bis 5 Sätze) mit kurzer spoilerfreier Inhaltsbeschreibung, Nennung der Hauptdarsteller und klarem Bezug auf deine Sehgewohnheiten sowie konkrete positiv bewertete deutsche Titel aus deiner Liste."}]'
   ].join(" ");
 }
 
 function extractJsonArrayText(rawText) {
-  let cleaned = String(rawText).replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+  let cleaned = String(rawText || "").replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
   const firstBracket = cleaned.indexOf("[");
   const lastBracket = cleaned.lastIndexOf("]");
-  if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) cleaned = cleaned.slice(firstBracket, lastBracket + 1);
+  if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+    cleaned = cleaned.slice(firstBracket, lastBracket + 1);
+  } else if (firstBracket !== -1) {
+    cleaned = cleaned.slice(firstBracket);
+  }
   return cleaned;
 }
 
+function escapeUnescapedQuotesInJson(jsonStr) {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < jsonStr.length; i++) {
+    const ch = jsonStr[i];
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      if (!inString) {
+        inString = true;
+        out += ch;
+      } else {
+        let j = i + 1;
+        while (j < jsonStr.length && /\s/.test(jsonStr[j])) j++;
+        const nextChar = jsonStr[j] || "";
+        if (nextChar === ":" || nextChar === "," || nextChar === "}" || nextChar === "]" || nextChar === "") {
+          inString = false;
+          out += ch;
+        } else {
+          out += '\\"';
+        }
+      }
+      continue;
+    }
+    if (inString && (ch === "\n" || ch === "\r")) {
+      out += ch === "\n" ? "\\n" : "";
+      continue;
+    }
+    out += ch;
+  }
+
+  return out;
+}
+
+function rescueCompleteJsonObjects(rawText) {
+  const text = String(rawText || "");
+  const startArray = text.indexOf("[");
+  if (startArray === -1) return [];
+
+  const rescued = [];
+  let objStart = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = startArray + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === "{") {
+      if (depth === 0) objStart = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && objStart !== -1) {
+        const candidate = text.slice(objStart, i + 1);
+        for (const attempt of [candidate, escapeUnescapedQuotesInJson(candidate)]) {
+          try {
+            const parsedObj = JSON.parse(attempt);
+            if (parsedObj && typeof parsedObj === "object" && (parsedObj.title || parsedObj.cluster || parsedObj.reason)) {
+              rescued.push(parsedObj);
+              break;
+            }
+          } catch {
+            // Weiter versuchen
+          }
+        }
+        objStart = -1;
+      }
+    }
+  }
+
+  return rescued;
+}
+
 function parseRecommendationsJson(rawText) {
-  const parsed = JSON.parse(extractJsonArrayText(rawText));
-  if (Array.isArray(parsed)) return parsed;
-  if (Array.isArray(parsed?.recommendations)) return parsed.recommendations;
+  const extracted = extractJsonArrayText(rawText);
+  const candidates = [
+    extracted,
+    escapeUnescapedQuotesInJson(extracted)
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) return { items: parsed, rescued: false };
+      if (Array.isArray(parsed?.recommendations)) return { items: parsed.recommendations, rescued: false };
+    } catch {
+      // Nächsten Reparaturversuch starten
+    }
+  }
+
+  const rescuedObjects = rescueCompleteJsonObjects(extracted);
+  if (rescuedObjects.length > 0) {
+    return { items: rescuedObjects, rescued: true };
+  }
+
   return null;
 }
 
@@ -677,7 +796,6 @@ function renderRecommendations(container, recs) {
       const title = stripMarkdown(rec.title || "Unbekannter Titel");
       const mediaType = normalizeMediaType(rec.type, rec);
       const provider = normalizeProvider(rec.provider);
-      const availability = stripMarkdown(rec.availability || "Anbieter prüfen");
       const runtime = stripMarkdown(rec.runtime || "");
       const reason = stripMarkdown(rec.reason || "");
       const customVideoState = {
@@ -692,8 +810,7 @@ function renderRecommendations(container, recs) {
       titleWrap.innerHTML = "<strong>" + escapeHtml(title) + "</strong>" +
         (rec.year ? " (" + escapeHtml(rec.year) + ")" : "") +
         '<span class="type-pill">' + escapeHtml(mediaType) + "</span>" +
-        '<span class="provider-pill">' + escapeHtml(provider) + "</span>" +
-        '<span class="avail-pill">' + escapeHtml(availability) + "</span>";
+        '<span class="provider-pill">' + escapeHtml(provider) + "</span>";
 
       const rightActions = document.createElement("div");
       rightActions.className = "actions";
@@ -824,7 +941,7 @@ async function fetchGeminiRecommendations({ apiKey, mood, availMode, searchEnabl
 
     const requestBody = {
       contents: [{ parts: [{ text: promptText }] }],
-      generationConfig: { maxOutputTokens: 3072 }
+      generationConfig: { maxOutputTokens: 4096 }
     };
     if (searchEnabled) requestBody.tools = [{ google_search: {} }];
     else requestBody.generationConfig.thinkingConfig = { thinkingBudget: 0 };
@@ -846,22 +963,21 @@ async function fetchGeminiRecommendations({ apiKey, mood, availMode, searchEnabl
       const rawText = parts.map((part) => part.text || "").join("\n").trim();
       onLog("Kandidatentext erhalten (" + rawText.length + " Zeichen).");
 
-      try {
-        const parsedRecs = parseRecommendationsJson(rawText);
-        if (parsedRecs) {
-          const limitedRecs = parsedRecs.slice(0, count);
-          localStorage.setItem(GEMINI_PREFERRED_MODEL_STORAGE, model);
-          recordRecommendations(limitedRecs);
-          onStatus("Vorschläge erstellt (Modell: " + model + (searchEnabled ? ", mit Web-Suche" : "") + "): " + limitedRecs.length + " Vorschläge");
-          onRecommendations(limitedRecs);
-          onLog("JSON erfolgreich geparst (" + limitedRecs.length + " Einträge). Vorschlagsverlauf aktualisiert.");
-        } else {
-          onStatus(stripMarkdown(rawText) || "Keine Antwort erhalten.");
-          onLog("Kein Array in JSON gefunden -> Textausgabe.");
-        }
-      } catch {
-        onStatus(stripMarkdown(rawText) || "Keine Antwort erhalten.");
-        onLog("Antwort war kein JSON -> Textausgabe.");
+      const parseResult = parseRecommendationsJson(rawText);
+      if (parseResult && Array.isArray(parseResult.items) && parseResult.items.length > 0) {
+        const limitedRecs = parseResult.items.slice(0, count);
+        localStorage.setItem(GEMINI_PREFERRED_MODEL_STORAGE, model);
+        recordRecommendations(limitedRecs);
+        const rescueSuffix = parseResult.rescued ? " (teilweise gerettet)" : "";
+        onStatus("Vorschläge erstellt (Modell: " + model + (searchEnabled ? ", mit Web-Suche" : "") + rescueSuffix + "): " + limitedRecs.length + " Vorschläge");
+        onRecommendations(limitedRecs);
+        onLog(
+          "JSON " + (parseResult.rescued ? "teilweise gerettet und geparst" : "erfolgreich geparst") +
+          " (" + limitedRecs.length + " Einträge). Vorschlagsverlauf aktualisiert."
+        );
+      } else {
+        onStatus("Antwort konnte nicht als Empfehlungsliste gelesen werden. Details stehen im Debug-Log.");
+        onLog("Kein verwertbares Empfehlungs-JSON erkannt. Rohtext-Auszug: " + stripMarkdown(rawText).slice(0, 300));
       }
       clearTimeout(timeoutId);
       return;
@@ -1169,9 +1285,19 @@ initializeHistoryView();
       badge = document.createElement("div");
       badge.id = "presetPersistenceStatus";
       badge.className = "meta";
+      badge.style.display = "block";
+      badge.style.flexBasis = "100%";
       badge.style.width = "100%";
-      badge.style.marginTop = "4px";
+      badge.style.marginTop = "8px";
       bar.append(badge);
+    } else {
+      badge.style.display = "block";
+      badge.style.flexBasis = "100%";
+      badge.style.width = "100%";
+      badge.style.marginTop = "8px";
+      if (bar.lastElementChild !== badge) {
+        bar.append(badge);
+      }
     }
     return badge;
   }
