@@ -452,3 +452,49 @@ a.link-btn {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* Schnell-Presets für KI-Empfehlungen (Desktop & Handy) */
+#quickPresetsBar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+#quickPresetsBar button {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Cluster-Folgeaktionen ebenfalls sauber umbrechend */
+.cluster-followup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  #quickPresetsBar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  #quickPresetsBar button {
+    min-height: 42px;
+    padding: 8px 10px;
+    font-size: 0.9rem;
+  }
+
+  .cluster-followup-actions button {
+    flex: 1 1 140px;
+  }
+}
