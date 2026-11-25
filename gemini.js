@@ -410,16 +410,10 @@ function extractYouTubeVideoId(input) {
   return "";
 }
 
-function buildTrailerEmbedSrc(title, year, mediaType, customVideoOrUrl) {
+function buildTrailerEmbedSrc(customVideoOrUrl) {
   const videoId = extractYouTubeVideoId(customVideoOrUrl);
-  if (videoId) {
-    return "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(videoId) + "?rel=0&modestbranding=1";
-  }
-  const cleanTitle = stripMarkdown(title || "").trim();
-  const cleanYear = stripMarkdown(year || "").trim();
-  const typeHint = mediaType === "Serie" ? "Serie" : "Film";
-  const query = [cleanTitle, typeHint, cleanYear, "Trailer deutsch"].filter(Boolean).join(" ");
-  return "https://www.youtube-nocookie.com/embed?listType=search&list=" + encodeURIComponent(query) + "&rel=0&modestbranding=1";
+  if (!videoId) return "";
+  return "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(videoId) + "?rel=0&modestbranding=1";
 }
 
 function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, titles, seenListText, searchEnabled, recentRecommendationTitles, recommendationCount }) {
@@ -449,7 +443,7 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
     focusHint,
     providerHint,
     searchInstruction,
-    "Sprache & Titelkonvention (sehr wichtig): Verwende sowohl im Feld 'title' als auch bei ALLEN Vergleichs- und Referenztiteln im Text konsequent die offiziellen deutschen Verleih- bzw. Sendetitel (so wie sie in Deutschland bei Netflix, ARD, ZDF, Sky oder im Kino laufen), niemals englische Originaltitel – es sei denn, ein Titel hat in Deutschland keinen eigenen deutschen Titel.",
+    "Sprache & Titelkonvention (sehr wichtig): Verwende sowohl im Feld 'title' als auch bei ALLEN Vergleichs- und Referenztiteln im Text konsequent die offiziellen deutschen Verleih- bzw. Sendetitel (so wie sie in Deutschland bei Netflix, ARD, ZDF, Sky oder im Kino laufen), niemals englische Originaltitel (z. B. nutze 'Gefangene' statt 'Prisoners') – es sei denn, ein Titel hat in Deutschland keinen eigenen deutschen Titel.",
     "Wichtig für 'cluster' und 'clusterDesc': Gruppiere die Empfehlungen in sinnvolle inhaltliche, atmosphärische oder dramaturgische Cluster. Formuliere 'cluster' als pointierte deutsche Überschrift mit maximal 3 bis 5 Wörtern (z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als persönliche, knappe Clusterbeschreibung in 1 bis 2 kurzen Sätzen, die den gemeinsamen Kern direkt für mich auf den Punkt bringt.",
     "Wichtig für 'reason': Schreibe in 'reason' eine persönliche, direkte und gut lesbare Empfehlung in 3 bis 5 Sätzen, in der du mich unmittelbar ansprichst ('du', 'dein', 'dir') statt abstrakt über 'den Zuschauer' oder 'das Publikum' zu reden. Verzichte komplett auf technische Ausführungen zu Bildsprache, Kameraführung, Schnitt oder Sounddesign. Gehe stattdessen im fließenden Text auf drei Dinge ein: (1) worum es in der Geschichte geht (kurz und ohne Spoiler), (2) welche bekannten Hauptdarsteller mitspielen und (3) warum der Titel konkret zu meinen Sehgewohnheiten und Bewertungen passt – nenne dabei mindestens einen konkreten deutschen Titel aus meinen mit 'Finde ich super' oder 'Gefällt mir' bewerteten Favoriten (oder aus meiner Merkliste) als persönlichen Ankerpunkt.",
     "Antworte auf Deutsch mit genau " + count + " konkreten Empfehlungen als reines JSON-Array ohne einleitenden oder abschließenden Text:",
@@ -543,6 +537,11 @@ function buildTrailerDrawer(title, year, mediaType, customVideoState) {
   frameBox.style.background = "#090d16";
   frameBox.style.borderRadius = "8px";
   frameBox.style.overflow = "hidden";
+  frameBox.style.display = "flex";
+  frameBox.style.alignItems = "center";
+  frameBox.style.justifyContent = "center";
+  frameBox.style.padding = "16px";
+  frameBox.style.textAlign = "center";
 
   const toolbar = document.createElement("div");
   toolbar.className = "row";
@@ -553,7 +552,7 @@ function buildTrailerDrawer(title, year, mediaType, customVideoState) {
 
   const urlInput = document.createElement("input");
   urlInput.type = "text";
-  urlInput.placeholder = "Optional: YouTube-Link oder Video-ID einfügen...";
+  urlInput.placeholder = "YouTube-Link oder Video-ID einfügen...";
   urlInput.value = customVideoState.raw || "";
   urlInput.style.flex = "1 1 220px";
   urlInput.setAttribute("aria-label", "YouTube-Link oder Video-ID für " + title);
@@ -568,18 +567,37 @@ function buildTrailerDrawer(title, year, mediaType, customVideoState) {
   extLink.href = buildTrailerSearchUrl(title, year, mediaType);
   extLink.target = "_blank";
   extLink.rel = "noopener noreferrer";
-  extLink.textContent = "Auf YouTube öffnen";
+  extLink.textContent = "Auf YouTube suchen";
 
   const hintText = document.createElement("div");
   hintText.className = "meta";
   hintText.style.marginTop = "6px";
   hintText.textContent =
-    "Hinweis: Falls ein Video auf YouTube das Einbetten blockiert oder die Suche nicht den gewünschten Trailer trifft, nutze „Auf YouTube öffnen“ oder füge einen YouTube-Link bzw. eine Video-ID ein.";
+    "YouTube blockiert Such-Embeds im Browser. Nutze „Auf YouTube suchen“ oder füge unten einen YouTube-Link bzw. eine Video-ID ein und klicke auf „Link laden“.";
+
+  const renderPlaceholder = (message) => {
+    frameBox.innerHTML = "";
+    const msgEl = document.createElement("div");
+    msgEl.className = "meta";
+    msgEl.style.maxWidth = "420px";
+    msgEl.textContent = message;
+    frameBox.append(msgEl);
+  };
 
   const mountIframe = () => {
+    const embedSrc = buildTrailerEmbedSrc(title, year, mediaType, customVideoState.raw);
+    if (!embedSrc) {
+      renderPlaceholder(
+        customVideoState.raw
+          ? "Kein gültiger YouTube-Link oder keine gültige Video-ID erkannt. Bitte einen YouTube-Link oder eine 11-stellige Video-ID eingeben."
+          : "Noch kein konkreter Trailer-Link hinterlegt. Klicke auf „Auf YouTube suchen“ oder füge unten einen YouTube-Link bzw. eine Video-ID ein."
+      );
+      return;
+    }
+
     frameBox.innerHTML = "";
     const iframe = document.createElement("iframe");
-    iframe.src = buildTrailerEmbedSrc(title, year, mediaType, customVideoState.raw);
+    iframe.src = embedSrc;
     iframe.title = "Trailer zu " + title;
     iframe.style.width = "100%";
     iframe.style.height = "100%";
