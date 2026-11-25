@@ -11,6 +11,7 @@ const GEMINI_MAX_FALLBACKS = 2;
 const GEMINI_PREFERRED_MODEL_STORAGE = "watchlist_kurator_gemini_preferred_model_v1";
 const RECOMMENDATION_HISTORY_STORAGE = "watchlist_kurator_recommendation_history_v1";
 const RECOMMENDATION_COUNT_STORAGE = "watchlist_kurator_recommendation_count_v1";
+const DYNAMIC_PRESETS_STORAGE = "watchlist_kurator_dynamic_presets_v1";
 const RECOMMENDATION_COOLDOWN_DAYS = 60;
 const RECOMMENDATION_HISTORY_MAX = 500;
 const DEFAULT_RECOMMENDATION_COUNT = 4;
@@ -812,6 +813,39 @@ initializeHistoryView();
     }
   ];
 
+  const RANDOM_SEEDS = [
+    "unerwartete Figurenkonstellation mit ruhigem Aufbau",
+    "dichte Atmosphäre und psychologische Spannung",
+    "ungewöhnliche Schauplätze und starke Ortsbindung",
+    "kompakte Erzählweise ohne Längen",
+    "überraschende Wendungen ohne billige Effekte",
+    "persönliche Konflikte und moralische Grauzonen",
+    "prägnante Gegenwartsthemen oder realistische Lebenswelten"
+  ];
+
+  const FALLBACK_RANDOM_PRESETS = [
+    {
+      label: "Dichte Figurenspannung",
+      moodText: "Psychologisch dichte Geschichte mit starken Figuren",
+      promptHint: "Fokus auf Figurenkonflikte, innere Spannung und glaubwürdige Dialoge ohne unnötige Action."
+    },
+    {
+      label: "Abgelegener Schauplatz",
+      moodText: "Geschichte an einem markanten, abgelegenen Ort",
+      promptHint: "Stelle den Ort und seine Wirkung auf die Figuren in den Mittelpunkt, ohne Kitsch oder Übernatürliches."
+    },
+    {
+      label: "Straffer Abend-Film",
+      moodText: "Kompakter Spielfilm mit klarem Spannungsbogen",
+      promptHint: "Bevorzuge Spielfilme (type: 'Film') mit zügiger Dramaturgie und sauberem Abschluss."
+    },
+    {
+      label: "Kleine Dosis Neues",
+      moodText: "Etwas Ungewohntes, das trotzdem zum Geschmack passt",
+      promptHint: "Bringe eine frische erzählerische oder thematische Richtung ein, die nicht nach bloßer Routine klingt."
+    }
+  ];
+
   let activeExtraPromptHint = "";
   let resetTimerId = null;
 
@@ -821,20 +855,25 @@ initializeHistoryView();
     }
     resetTimerId = setTimeout(() => {
       activeExtraPromptHint = "";
+      window.__activeDynamicPresetHint = "";
       resetTimerId = null;
     }, 1500);
   }
 
-  const baseBuildPrompt = typeof buildGeminiPrompt === "function" ? buildGeminiPrompt : null;
+  const baseBuildPrompt = typeof window.buildGeminiPrompt === "function" ? window.buildGeminiPrompt : null;
   if (baseBuildPrompt && !baseBuildPrompt.__modesWrapped) {
     const wrappedBuildPrompt = function (params) {
-      const isWatchlistGems = activeExtraPromptHint.includes("Aktuellen Merkliste");
+      const combinedHint = [activeExtraPromptHint, window.__activeDynamicPresetHint]
+        .map((v) => String(v || "").trim())
+        .filter(Boolean)
+        .join(" ");
+      const isWatchlistGems = combinedHint.includes("Aktuellen Merkliste");
       const effectiveParams = isWatchlistGems
         ? { ...params, recentRecommendationTitles: [] }
         : params;
       const prompt = baseBuildPrompt.call(this, effectiveParams);
-      if (!activeExtraPromptHint) return prompt;
-      return prompt + " Zusätzlicher Empfehlungs-Fokus: " + activeExtraPromptHint;
+      if (!combinedHint) return prompt;
+      return prompt + " Zusätzlicher Empfehlungs-Fokus: " + combinedHint;
     };
     wrappedBuildPrompt.__modesWrapped = true;
     window.buildGeminiPrompt = wrappedBuildPrompt;
@@ -900,7 +939,7 @@ initializeHistoryView();
     });
   }
 
-  const baseRenderRecs = typeof renderRecommendations === "function" ? renderRecommendations : null;
+  const baseRenderRecs = typeof window.renderRecommendations === "function" ? window.renderRecommendations : null;
   if (baseRenderRecs && !baseRenderRecs.__modesWrapped) {
     const wrappedRenderRecs = function (container, recs) {
       baseRenderRecs.call(this, container, recs);
@@ -912,41 +951,235 @@ initializeHistoryView();
     window.renderRecommendations = wrappedRenderRecs;
   }
 
-  function initQuickPresets() {
-    const moodEl = document.getElementById("moodInput");
-    const recBtn = document.getElementById("recommendBtn");
-    if (!moodEl || !recBtn || document.getElementById("quickPresetsBar")) return;
+  function loadStoredDynamicPresets() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(DYNAMIC_PRESETS_STORAGE) || "[]");
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .filter((item) => item && item.label && item.moodText)
+        .slice(0, 8)
+        .map((item, idx) => ({
+          id: "dyn_" + idx + "_" + String(item.label).slice(0, 12),
+          label: String(item.label).trim().slice(0, 32),
+          moodText: String(item.moodText).trim(),
+          promptHint: String(item.promptHint || item.moodText).trim()
+        }));
+    } catch {
+      return [];
+    }
+  }
 
-    const bar = document.createElement("div");
-    bar.id = "quickPresetsBar";
-    bar.className = "actions";
-    bar.style.marginTop = "10px";
-    bar.style.flexWrap = "wrap";
+  function saveStoredDynamicPresets(presets) {
+    localStorage.setItem(DYNAMIC_PRESETS_STORAGE, JSON.stringify(presets));
+  }
 
-    QUICK_PRESETS.forEach((preset) => {
+  function buildDynamicPresetsPrompt(count = 5) {
+    const seed = RANDOM_SEEDS[Math.floor(Math.random() * RANDOM_SEEDS.length)];
+    const ratingMap = typeof seenRatings === "object" && seenRatings ? seenRatings : {};
+    const entries = Array.isArray(typeof seenEntries !== "undefined" ? seenEntries : null) ? seenEntries : [];
+    const watchlist = Array.isArray(typeof items !== "undefined" ? items : null) ? items : [];
+
+    const superTitles = entries
+      .filter((e) => {
+        const t = String(e?.title || "").trim();
+        if (!t) return false;
+        const r = typeof getTitleRating === "function" ? getTitleRating(t) : ratingMap[t.toLocaleLowerCase("de-DE")];
+        return r === "Finde ich super";
+      })
+      .slice(-8)
+      .map((e) => String(e.title).trim());
+
+    const dislikedTitles = entries
+      .filter((e) => {
+        const t = String(e?.title || "").trim();
+        if (!t) return false;
+        const r = typeof getTitleRating === "function" ? getTitleRating(t) : ratingMap[t.toLocaleLowerCase("de-DE")];
+        return r === "Gefällt mir nicht";
+      })
+      .slice(-8)
+      .map((e) => String(e.title).trim());
+
+    const sampleWatchlist = watchlist.slice(0, 10).map((i) => String(i?.title || "").trim()).filter(Boolean);
+
+    return [
+      "Du bist ein Kurator für Filme und Serien in Deutschland.",
+      "Erzeuge " + count + " abwechslungsreiche, kreative Schnell-Preset-Buttons für die Stimmungssuche eines Nutzers.",
+      "Zufalls-Impuls für diese Runde: " + seed + " (Zufallszahl: " + Math.floor(Math.random() * 10000) + ").",
+      "Top-Favoriten ('Finde ich super'): " + (superTitles.length ? superTitles.join(", ") : "keine angegeben") + ".",
+      "Vermeiden ('Gefällt mir nicht'): " + (dislikedTitles.length ? dislikedTitles.join(", ") : "keine angegeben") + ".",
+      "Aus der Merkliste: " + (sampleWatchlist.length ? sampleWatchlist.join(", ") : "keine angegeben") + ".",
+      "Regeln: Jedes Preset braucht ein kurzes, prägnantes 'label' (max. 2–4 Wörter auf Deutsch), einen klaren 'moodText' (1 kurzer Satz für das Suchfeld) und einen konkreten 'promptHint' (1–2 Sätze als Steuerungs-Hinweis für spätere Empfehlungen, ohne technische Kamera-/Ton-Begriffe).",
+      "Antworte ausschließlich als reines JSON-Array ohne Markdown oder Zusatztext:",
+      '[{"label":"Kurz-Label","moodText":"Kurzer Stimmungstext","promptHint":"Konkreter Steuerungs-Hinweis für Empfehlungen."}]'
+    ].join(" ");
+  }
+
+  async function generateRandomPresetsFromGemini(count = 5) {
+    const apiKey = typeof getApiKey === "function" ? getApiKey() : (localStorage.getItem("watchlist_kurator_gemini_api_key_v1") || "");
+    if (!apiKey) {
+      const shuffled = [...FALLBACK_RANDOM_PRESETS].sort(() => Math.random() - 0.5).slice(0, count);
+      return { presets: shuffled, usedFallback: true, reason: "Kein API-Key hinterlegt" };
+    }
+
+    const models = typeof GEMINI_MODELS !== "undefined" && Array.isArray(GEMINI_MODELS)
+      ? GEMINI_MODELS
+      : ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"];
+    const host = typeof GEMINI_API_HOST !== "undefined" ? GEMINI_API_HOST : "generativelanguage.googleapis.com";
+    const prompt = buildDynamicPresetsPrompt(count);
+
+    for (const model of models) {
+      try {
+        const url = "https://" + host + "/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(apiKey);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 1024, thinkingConfig: { thinkingBudget: 0 } }
+          })
+        });
+        const rawBody = await res.text();
+        const data = typeof parseApiResponseText === "function"
+          ? parseApiResponseText(rawBody, res.status)
+          : JSON.parse(rawBody);
+        if (!res.ok) continue;
+
+        const text = (data?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("\n").trim();
+        const cleaned = typeof extractJsonArrayText === "function" ? extractJsonArrayText(text) : text;
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const normalized = parsed
+            .filter((item) => item && item.label && item.moodText)
+            .slice(0, count)
+            .map((item, idx) => ({
+              id: "dyn_" + Date.now() + "_" + idx,
+              label: String(item.label).trim().slice(0, 32),
+              moodText: String(item.moodText).trim(),
+              promptHint: String(item.promptHint || item.moodText).trim()
+            }));
+          if (normalized.length > 0) {
+            return { presets: normalized, usedFallback: false, model };
+          }
+        }
+      } catch {
+        // Nächstes Modell versuchen
+      }
+    }
+
+    const shuffled = [...FALLBACK_RANDOM_PRESETS].sort(() => Math.random() - 0.5).slice(0, count);
+    return { presets: shuffled, usedFallback: true, reason: "KI-Antwort nicht verwertbar" };
+  }
+
+  function renderDynamicPresetButtons(bar, presets, applyPresetFn) {
+    bar.querySelectorAll("button[data-dynamic-preset='true']").forEach((el) => el.remove());
+
+    const rollBtn = bar.querySelector("button[data-roll-presets='true']");
+    presets.forEach((preset) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "secondary";
+      btn.dataset.dynamicPreset = "true";
       btn.textContent = preset.label;
-      btn.addEventListener("click", () => {
-        const resolved = typeof preset.resolveDynamic === "function" ? preset.resolveDynamic() : preset;
-        const currentMood = moodEl.value.trim();
-        if (resolved.moodText) {
-          moodEl.value = currentMood && !currentMood.includes(resolved.moodText)
-            ? currentMood + " – " + resolved.moodText
-            : resolved.moodText;
-        }
-        activeExtraPromptHint = resolved.promptHint || "";
-        moodEl.focus();
-      });
-      bar.append(btn);
+      btn.title = preset.moodText;
+      btn.addEventListener("click", () => applyPresetFn(preset));
+      if (rollBtn) {
+        bar.insertBefore(btn, rollBtn);
+      } else {
+        bar.append(btn);
+      }
     });
+  }
 
-    const aiTopRow = moodEl.closest(".row.ai-top");
-    if (aiTopRow) {
-      aiTopRow.insertAdjacentElement("afterend", bar);
-    } else {
-      moodEl.insertAdjacentElement("afterend", bar);
+  function initQuickPresetsAndRandomizer() {
+    const moodEl = document.getElementById("moodInput");
+    const recBtn = document.getElementById("recommendBtn");
+    const statusEl = document.getElementById("aiStatus");
+    if (!moodEl || !recBtn) return;
+
+    let bar = document.getElementById("quickPresetsBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "quickPresetsBar";
+      bar.className = "actions";
+      bar.style.marginTop = "10px";
+      bar.style.flexWrap = "wrap";
+
+      QUICK_PRESETS.forEach((preset) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "secondary";
+        btn.textContent = preset.label;
+        btn.addEventListener("click", () => {
+          const resolved = typeof preset.resolveDynamic === "function" ? preset.resolveDynamic() : preset;
+          const currentMood = moodEl.value.trim();
+          if (resolved.moodText) {
+            moodEl.value = currentMood && !currentMood.includes(resolved.moodText)
+              ? currentMood + " – " + resolved.moodText
+              : resolved.moodText;
+          }
+          activeExtraPromptHint = resolved.promptHint || "";
+          window.__activeDynamicPresetHint = "";
+          moodEl.dispatchEvent(new Event("input", { bubbles: true }));
+          moodEl.focus();
+        });
+        bar.append(btn);
+      });
+
+      const aiTopRow = moodEl.closest(".row.ai-top");
+      if (aiTopRow) {
+        aiTopRow.insertAdjacentElement("afterend", bar);
+      } else {
+        moodEl.insertAdjacentElement("afterend", bar);
+      }
+    }
+
+    if (!bar.querySelector("button[data-roll-presets='true']")) {
+      const applyDynamicPreset = (preset) => {
+        const currentMood = moodEl.value.trim();
+        if (preset.moodText) {
+          moodEl.value = currentMood && !currentMood.includes(preset.moodText)
+            ? currentMood + " – " + preset.moodText
+            : preset.moodText;
+        }
+        activeExtraPromptHint = "";
+        window.__activeDynamicPresetHint = String(preset.promptHint || preset.moodText || "").trim();
+        moodEl.dispatchEvent(new Event("input", { bubbles: true }));
+        moodEl.focus();
+        if (statusEl) {
+          statusEl.textContent = "Zufalls-Preset aktiv: „" + preset.label + "“";
+        }
+      };
+
+      const rollBtn = document.createElement("button");
+      rollBtn.type = "button";
+      rollBtn.className = "secondary";
+      rollBtn.dataset.rollPresets = "true";
+      rollBtn.textContent = "🎲 Zufalls-Presets";
+      rollBtn.addEventListener("click", async () => {
+        rollBtn.disabled = true;
+        const prevText = rollBtn.textContent;
+        rollBtn.textContent = "Würfle...";
+        if (statusEl) statusEl.textContent = "Generiere neue Zufalls-Presets per KI...";
+
+        const result = await generateRandomPresetsFromGemini(5);
+        saveStoredDynamicPresets(result.presets);
+        renderDynamicPresetButtons(bar, result.presets, applyDynamicPreset);
+
+        if (statusEl) {
+          statusEl.textContent = result.usedFallback
+            ? "Lokale Zufalls-Presets geladen (" + result.reason + ")."
+            : "Neue KI-Zufalls-Presets erstellt (" + result.model + ").";
+        }
+        rollBtn.textContent = prevText;
+        rollBtn.disabled = false;
+      });
+
+      bar.append(rollBtn);
+
+      const stored = loadStoredDynamicPresets();
+      if (stored.length > 0) {
+        renderDynamicPresetButtons(bar, stored, applyDynamicPreset);
+      }
     }
 
     if (!recBtn.dataset.presetResetBound) {
@@ -958,8 +1191,8 @@ initializeHistoryView();
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initQuickPresets);
+    document.addEventListener("DOMContentLoaded", initQuickPresetsAndRandomizer);
   } else {
-    initQuickPresets();
+    initQuickPresetsAndRandomizer();
   }
 })();
