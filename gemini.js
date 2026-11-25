@@ -973,6 +973,10 @@ initializeHistoryView();
     localStorage.setItem(DYNAMIC_PRESETS_STORAGE, JSON.stringify(presets));
   }
 
+  function clearStoredDynamicPresets() {
+    localStorage.removeItem(DYNAMIC_PRESETS_STORAGE);
+  }
+
   function buildDynamicPresetsPrompt(count = 5) {
     const seed = RANDOM_SEEDS[Math.floor(Math.random() * RANDOM_SEEDS.length)];
     const ratingMap = typeof seenRatings === "object" && seenRatings ? seenRatings : {};
@@ -1070,24 +1074,79 @@ initializeHistoryView();
     return { presets: shuffled, usedFallback: true, reason: "KI-Antwort nicht verwertbar" };
   }
 
-  function renderDynamicPresetButtons(bar, presets, applyPresetFn) {
-    bar.querySelectorAll("button[data-dynamic-preset='true']").forEach((el) => el.remove());
+  function renderPresetBarButtons(bar, presets, moodEl, statusEl, isDynamicSet) {
+    const recBtn = document.getElementById("recommendBtn");
+    bar.querySelectorAll("button[data-preset-item='true']").forEach((el) => el.remove());
 
     const rollBtn = bar.querySelector("button[data-roll-presets='true']");
+    let resetBtn = bar.querySelector("button[data-reset-presets='true']");
+
+    if (isDynamicSet && !resetBtn) {
+      resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.className = "secondary";
+      resetBtn.dataset.resetPresets = "true";
+      resetBtn.textContent = "Standard-Presets";
+      resetBtn.title = "Zurück zu den festen Presets";
+      resetBtn.addEventListener("click", () => {
+        clearStoredDynamicPresets();
+        activeExtraPromptHint = "";
+        window.__activeDynamicPresetHint = "";
+        renderPresetBarButtons(bar, QUICK_PRESETS, moodEl, statusEl, false);
+        if (statusEl) statusEl.textContent = "Standard-Presets wiederhergestellt.";
+      });
+      if (rollBtn) {
+        bar.insertBefore(resetBtn, rollBtn);
+      } else {
+        bar.append(resetBtn);
+      }
+    } else if (!isDynamicSet && resetBtn) {
+      resetBtn.remove();
+    }
+
     presets.forEach((preset) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "secondary";
-      btn.dataset.dynamicPreset = "true";
+      btn.dataset.presetItem = "true";
       btn.textContent = preset.label;
-      btn.title = preset.moodText;
-      btn.addEventListener("click", () => applyPresetFn(preset));
-      if (rollBtn) {
-        bar.insertBefore(btn, rollBtn);
+      btn.title = preset.moodText || preset.label;
+      btn.addEventListener("click", () => {
+        const resolved = typeof preset.resolveDynamic === "function" ? preset.resolveDynamic() : preset;
+        const currentMood = moodEl.value.trim();
+        if (resolved.moodText) {
+          moodEl.value = currentMood && !currentMood.includes(resolved.moodText)
+            ? currentMood + " – " + resolved.moodText
+            : resolved.moodText;
+        }
+        if (isDynamicSet) {
+          activeExtraPromptHint = "";
+          window.__activeDynamicPresetHint = String(resolved.promptHint || resolved.moodText || "").trim();
+          if (statusEl) {
+            statusEl.textContent = "Zufalls-Preset aktiv: „" + preset.label + "“";
+          }
+        } else {
+          activeExtraPromptHint = resolved.promptHint || "";
+          window.__activeDynamicPresetHint = "";
+        }
+        moodEl.dispatchEvent(new Event("input", { bubbles: true }));
+        moodEl.focus();
+      });
+
+      const insertBeforeTarget = resetBtn || rollBtn;
+      if (insertBeforeTarget) {
+        bar.insertBefore(btn, insertBeforeTarget);
       } else {
         bar.append(btn);
       }
     });
+
+    if (recBtn && !recBtn.dataset.presetResetBound) {
+      recBtn.dataset.presetResetBound = "true";
+      recBtn.addEventListener("click", () => {
+        scheduleHintReset();
+      });
+    }
   }
 
   function initQuickPresetsAndRandomizer() {
@@ -1104,27 +1163,6 @@ initializeHistoryView();
       bar.style.marginTop = "10px";
       bar.style.flexWrap = "wrap";
 
-      QUICK_PRESETS.forEach((preset) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "secondary";
-        btn.textContent = preset.label;
-        btn.addEventListener("click", () => {
-          const resolved = typeof preset.resolveDynamic === "function" ? preset.resolveDynamic() : preset;
-          const currentMood = moodEl.value.trim();
-          if (resolved.moodText) {
-            moodEl.value = currentMood && !currentMood.includes(resolved.moodText)
-              ? currentMood + " – " + resolved.moodText
-              : resolved.moodText;
-          }
-          activeExtraPromptHint = resolved.promptHint || "";
-          window.__activeDynamicPresetHint = "";
-          moodEl.dispatchEvent(new Event("input", { bubbles: true }));
-          moodEl.focus();
-        });
-        bar.append(btn);
-      });
-
       const aiTopRow = moodEl.closest(".row.ai-top");
       if (aiTopRow) {
         aiTopRow.insertAdjacentElement("afterend", bar);
@@ -1134,22 +1172,6 @@ initializeHistoryView();
     }
 
     if (!bar.querySelector("button[data-roll-presets='true']")) {
-      const applyDynamicPreset = (preset) => {
-        const currentMood = moodEl.value.trim();
-        if (preset.moodText) {
-          moodEl.value = currentMood && !currentMood.includes(preset.moodText)
-            ? currentMood + " – " + preset.moodText
-            : preset.moodText;
-        }
-        activeExtraPromptHint = "";
-        window.__activeDynamicPresetHint = String(preset.promptHint || preset.moodText || "").trim();
-        moodEl.dispatchEvent(new Event("input", { bubbles: true }));
-        moodEl.focus();
-        if (statusEl) {
-          statusEl.textContent = "Zufalls-Preset aktiv: „" + preset.label + "“";
-        }
-      };
-
       const rollBtn = document.createElement("button");
       rollBtn.type = "button";
       rollBtn.className = "secondary";
@@ -1163,7 +1185,7 @@ initializeHistoryView();
 
         const result = await generateRandomPresetsFromGemini(5);
         saveStoredDynamicPresets(result.presets);
-        renderDynamicPresetButtons(bar, result.presets, applyDynamicPreset);
+        renderPresetBarButtons(bar, result.presets, moodEl, statusEl, true);
 
         if (statusEl) {
           statusEl.textContent = result.usedFallback
@@ -1178,15 +1200,10 @@ initializeHistoryView();
 
       const stored = loadStoredDynamicPresets();
       if (stored.length > 0) {
-        renderDynamicPresetButtons(bar, stored, applyDynamicPreset);
+        renderPresetBarButtons(bar, stored, moodEl, statusEl, true);
+      } else {
+        renderPresetBarButtons(bar, QUICK_PRESETS, moodEl, statusEl, false);
       }
-    }
-
-    if (!recBtn.dataset.presetResetBound) {
-      recBtn.dataset.presetResetBound = "true";
-      recBtn.addEventListener("click", () => {
-        scheduleHintReset();
-      });
     }
   }
 
