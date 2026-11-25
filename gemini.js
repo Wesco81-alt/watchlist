@@ -397,7 +397,7 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
     ? "Kontext-Hinweis (nur als grobe Richtung, keine Verfügbarkeits-Vorhersage): " + availMode + "."
     : "";
   const searchInstruction = searchEnabled
-    ? "Nutze die Google-Suche nur zur Faktenprüfung von Titel, Erscheinungsjahr, Laufzeit und Format – nicht, um eine garantierte aktuelle Streaming-Verfügbarkeit zu behaupten."
+    ? "Nutze die Google-Suche nur zur Faktenprüfung von Titel, Erscheinungsjahr, Laufzeit, Inhalt und Hauptdarstellern – nicht, um eine garantierte aktuelle Streaming-Verfügbarkeit zu behaupten."
     : "Verzichte auf Spekulationen über aktuelle Streaming-Rechte oder Katalog-Verfügbarkeiten; setze bei 'availability' ehrlich 'Anbieter prüfen', wenn kein fester Sender/Katalog sicher ist.";
 
   return [
@@ -405,17 +405,17 @@ function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, title
     "Dein Hauptauftrag ist NICHT die Vorhersage von Streaming-Verfügbarkeiten, sondern treffsichere Empfehlungen auf Basis des Sehverlaufs, der Bewertungen und einer sinnvollen thematischen, atmosphärischen oder dramaturgischen Clusterbildung.",
     "Aktuelle Merkliste (inkl. Bewertungen): " + (titles || "keine Einträge") + ".",
     "Gesehene Titel & Bewertungen (" + seenListText + ").",
-    "Geschmacksprofil & Gewichtung: Nutze vor allem 'Finde ich super' als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve, Erzähltempo und Themen. Beziehe 'Gefällt mir' positiv ein und vermeide 'Gefällt mir nicht' sowie direkte inhaltliche oder stilistische Kopien davon.",
+    "Geschmacksprofil & Gewichtung: Nutze vor allem 'Finde ich super' als wichtigsten Kompass für Stil, Stimmung, Dramaturgie, Spannungskurve und Themen. Beziehe 'Gefällt mir' positiv ein und vermeide 'Gefällt mir nicht' sowie direkte inhaltliche oder stilistische Kopien davon.",
     repeatInstruction,
     "Schlage keine Titel aus der Merkliste oder der gesehenen Liste vor (auch nicht in leicht abweichender Schreibweise oder als bereits gesehene Staffel/Reihe).",
     "Wunsch/Stimmung: " + mood + ".",
     focusHint,
     providerHint,
     searchInstruction,
-    "Wichtig für 'cluster' und 'clusterDesc': Gruppiere die Empfehlungen in sinnvolle inhaltliche, atmosphärische oder dramaturgische Cluster. Formuliere 'cluster' als pointierte Überschrift mit maximal 3 bis 5 Wörtern (z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als ausführlichere, stimmige Clusterbeschreibung in 2 bis 3 Sätzen, die den gemeinsamen Kern, die Stimmung und das verbindende Motiv der Titel im Cluster greifbar ausführt.",
-    "Wichtig für 'reason': Schreibe in 'reason' eine ausführlichere Begründung in 3 bis 5 Sätzen. Erläutere darin sowohl die dramaturgische und atmosphärische Passung zu den Favoriten als auch konkrete Hinweise zu Bildsprache, Kameraführung, Schnitt/Rhythmus, Ton/Sounddesign oder Inszenierung direkt im fließenden Text.",
+    "Wichtig für 'cluster' und 'clusterDesc': Gruppiere die Empfehlungen in sinnvolle inhaltliche, atmosphärische oder dramaturgische Cluster. Formuliere 'cluster' als pointierte Überschrift mit maximal 3 bis 5 Wörtern (z. B. 'Kalte Rätsel im Nebel' oder 'Gnadenlose Doppelböden') – niemals bloß Anbieternamen, Mediatheken oder Verfügbarkeits-Begriffe. Formuliere 'clusterDesc' als knappe, prägnante Clusterbeschreibung in 1 bis 2 kurzen Sätzen zum gemeinsamen Kern der Titel.",
+    "Wichtig für 'reason': Schreibe in 'reason' eine klare, gut lesbare Begründung in 3 bis 5 Sätzen. Verzichte komplett auf technische Ausführungen zu Bildsprache, Kameraführung, Schnitt oder Sounddesign. Gehe stattdessen direkt im fließenden Text auf drei Dinge ein: (1) eine kurze Beschreibung des Inhalts (ohne Spoiler), (2) die wichtigsten beteiligten Hauptdarsteller und (3) an welchen konkreten anderen Filmen oder Serien – insbesondere aus den positiv bewerteten Favoriten – sich die Empfehlung thematisch, tonal oder erzählerisch orientiert.",
     "Antworte auf Deutsch mit genau " + count + " konkreten Empfehlungen als reines JSON-Array ohne einleitenden oder abschließenden Text:",
-    '[{"cluster":"Pointierte Überschrift (3-5 Wörter)","clusterDesc":"Ausführlichere Clusterbeschreibung in 2 bis 3 Sätzen zum gemeinsamen Kern und zur Atmosphäre.","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","availability":"z.B. Geschmacks-Match oder Anbieter prüfen","reason":"Ausführliche Begründung (3 bis 5 Sätze) zur dramaturgischen und atmosphärischen Passung zu den Favoriten inklusive Einordnung von Bild/Ton und Inszenierung."}]'
+    '[{"cluster":"Pointierte Überschrift (3-5 Wörter)","clusterDesc":"Knappe Clusterbeschreibung in 1 bis 2 kurzen Sätzen.","title":"Titel","type":"Film oder Serie","year":"Jahr","runtime":"Laufzeit oder Staffeln","provider":"Anbieter","availability":"z.B. Geschmacks-Match oder Anbieter prüfen","reason":"Kurze Inhaltsbeschreibung (spoilerfrei), Nennung der Hauptdarsteller sowie Einordnung, an welchen anderen Filmen oder Serien sich die Empfehlung orientiert (insgesamt 3 bis 5 Sätze)."}]'
   ].join(" ");
 }
 
@@ -525,11 +525,7 @@ function renderRecommendations(container, recs) {
       const provider = normalizeProvider(rec.provider);
       const availability = stripMarkdown(rec.availability || "Anbieter prüfen");
       const runtime = stripMarkdown(rec.runtime || "");
-      const legacyAvHint = stripMarkdown(rec.avHint || "");
-      const baseReason = stripMarkdown(rec.reason || "");
-      const reason = baseReason && legacyAvHint && !baseReason.toLowerCase().includes(legacyAvHint.toLowerCase())
-        ? baseReason + " Inszenierung & Bild/Ton: " + legacyAvHint + "."
-        : (baseReason || legacyAvHint);
+      const reason = stripMarkdown(rec.reason || "");
 
       const card = document.createElement("div");
       card.className = "rec-card";
