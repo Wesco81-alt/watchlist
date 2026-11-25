@@ -386,6 +386,42 @@ function buildAvailabilityCheckUrl(title, provider) {
   return "https://www.google.com/search?q=" + encodeURIComponent(queryParts.join(" "));
 }
 
+function buildTrailerSearchUrl(title, year, mediaType) {
+  const cleanTitle = stripMarkdown(title || "").trim();
+  const cleanYear = stripMarkdown(year || "").trim();
+  const typeHint = mediaType === "Serie" ? "Serie" : "Film";
+  const query = [cleanTitle, typeHint, cleanYear, "Trailer deutsch"].filter(Boolean).join(" ");
+  return "https://www.youtube.com/results?search_query=" + encodeURIComponent(query);
+}
+
+function extractYouTubeVideoId(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) return raw;
+  const patterns = [
+    /(?:youtube\.com\/watch\?.*v=|youtube-nocookie\.com\/watch\?.*v=)([a-zA-Z0-9_-]{11})/,
+    /(?:youtube\.com\/embed\/|youtube-nocookie\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/
+  ];
+  for (const re of patterns) {
+    const match = raw.match(re);
+    if (match && match[1]) return match[1];
+  }
+  return "";
+}
+
+function buildTrailerEmbedSrc(title, year, mediaType, customVideoOrUrl) {
+  const videoId = extractYouTubeVideoId(customVideoOrUrl);
+  if (videoId) {
+    return "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(videoId) + "?rel=0&modestbranding=1";
+  }
+  const cleanTitle = stripMarkdown(title || "").trim();
+  const cleanYear = stripMarkdown(year || "").trim();
+  const typeHint = mediaType === "Serie" ? "Serie" : "Film";
+  const query = [cleanTitle, typeHint, cleanYear, "Trailer deutsch"].filter(Boolean).join(" ");
+  return "https://www.youtube-nocookie.com/embed?listType=search&list=" + encodeURIComponent(query) + "&rel=0&modestbranding=1";
+}
+
 function buildGeminiPrompt({ mood, availMode, enabledProviders, providers, titles, seenListText, searchEnabled, recentRecommendationTitles, recommendationCount }) {
   const count = recommendationCount || getRecommendationCount();
   const providerHint = enabledProviders.length > 0
@@ -491,6 +527,103 @@ function buildRecommendationRatingGroup(title, onSelect) {
   return group;
 }
 
+function buildTrailerDrawer(title, year, mediaType, customVideoState) {
+  const drawer = document.createElement("div");
+  drawer.className = "trailer-drawer";
+  drawer.style.display = "none";
+  drawer.style.marginTop = "10px";
+  drawer.style.paddingTop = "10px";
+  drawer.style.borderTop = "1px solid rgba(148, 163, 184, 0.25)";
+
+  const frameBox = document.createElement("div");
+  frameBox.className = "trailer-frame-box";
+  frameBox.style.position = "relative";
+  frameBox.style.width = "100%";
+  frameBox.style.aspectRatio = "16 / 9";
+  frameBox.style.background = "#090d16";
+  frameBox.style.borderRadius = "8px";
+  frameBox.style.overflow = "hidden";
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "row";
+  toolbar.style.marginTop = "8px";
+  toolbar.style.gap = "8px";
+  toolbar.style.flexWrap = "wrap";
+  toolbar.style.alignItems = "center";
+
+  const urlInput = document.createElement("input");
+  urlInput.type = "text";
+  urlInput.placeholder = "Optional: YouTube-Link oder Video-ID einfügen...";
+  urlInput.value = customVideoState.raw || "";
+  urlInput.style.flex = "1 1 220px";
+  urlInput.setAttribute("aria-label", "YouTube-Link oder Video-ID für " + title);
+
+  const applyBtn = document.createElement("button");
+  applyBtn.type = "button";
+  applyBtn.className = "secondary";
+  applyBtn.textContent = "Link laden";
+
+  const extLink = document.createElement("a");
+  extLink.className = "link-btn";
+  extLink.href = buildTrailerSearchUrl(title, year, mediaType);
+  extLink.target = "_blank";
+  extLink.rel = "noopener noreferrer";
+  extLink.textContent = "Auf YouTube öffnen";
+
+  const hintText = document.createElement("div");
+  hintText.className = "meta";
+  hintText.style.marginTop = "6px";
+  hintText.textContent =
+    "Hinweis: Falls ein Video auf YouTube das Einbetten blockiert oder die Suche nicht den gewünschten Trailer trifft, nutze „Auf YouTube öffnen“ oder füge einen YouTube-Link bzw. eine Video-ID ein.";
+
+  const mountIframe = () => {
+    frameBox.innerHTML = "";
+    const iframe = document.createElement("iframe");
+    iframe.src = buildTrailerEmbedSrc(title, year, mediaType, customVideoState.raw);
+    iframe.title = "Trailer zu " + title;
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "0";
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    iframe.allowFullscreen = true;
+    iframe.loading = "lazy";
+    frameBox.append(iframe);
+  };
+
+  const unmountIframe = () => {
+    frameBox.innerHTML = "";
+  };
+
+  applyBtn.addEventListener("click", () => {
+    customVideoState.raw = urlInput.value.trim();
+    mountIframe();
+  });
+
+  urlInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      customVideoState.raw = urlInput.value.trim();
+      mountIframe();
+    }
+  });
+
+  toolbar.append(urlInput, applyBtn, extLink);
+  drawer.append(frameBox, toolbar, hintText);
+
+  return {
+    drawer,
+    open: () => {
+      drawer.style.display = "block";
+      mountIframe();
+    },
+    close: () => {
+      drawer.style.display = "none";
+      unmountIframe();
+    },
+    isOpen: () => drawer.style.display !== "none"
+  };
+}
+
 function renderRecommendations(container, recs) {
   container.innerHTML = "";
   if (!Array.isArray(recs) || recs.length === 0) return;
@@ -528,6 +661,9 @@ function renderRecommendations(container, recs) {
       const availability = stripMarkdown(rec.availability || "Anbieter prüfen");
       const runtime = stripMarkdown(rec.runtime || "");
       const reason = stripMarkdown(rec.reason || "");
+      const customVideoState = {
+        raw: stripMarkdown(rec.trailerUrl || rec.youtubeUrl || rec.videoId || "")
+      };
 
       const card = document.createElement("div");
       card.className = "rec-card";
@@ -542,6 +678,19 @@ function renderRecommendations(container, recs) {
 
       const rightActions = document.createElement("div");
       rightActions.className = "actions";
+
+      const trailerToggleBtn = document.createElement("button");
+      trailerToggleBtn.type = "button";
+      trailerToggleBtn.className = "secondary";
+      trailerToggleBtn.textContent = "Trailer einblenden";
+
+      const trailerLink = document.createElement("a");
+      trailerLink.className = "link-btn";
+      trailerLink.href = buildTrailerSearchUrl(title, rec.year, mediaType);
+      trailerLink.target = "_blank";
+      trailerLink.rel = "noopener noreferrer";
+      trailerLink.textContent = "Trailer suchen";
+
       const checkLink = document.createElement("a");
       checkLink.className = "link-btn";
       checkLink.href = buildAvailabilityCheckUrl(title, provider);
@@ -559,9 +708,20 @@ function renderRecommendations(container, recs) {
         addBtn.className = "success";
         addBtn.disabled = true;
       });
-      rightActions.append(checkLink, addBtn);
+      rightActions.append(trailerToggleBtn, trailerLink, checkLink, addBtn);
       head.append(titleWrap, rightActions);
       card.append(head);
+
+      const trailerController = buildTrailerDrawer(title, rec.year, mediaType, customVideoState);
+      trailerToggleBtn.addEventListener("click", () => {
+        if (trailerController.isOpen()) {
+          trailerController.close();
+          trailerToggleBtn.textContent = "Trailer einblenden";
+        } else {
+          trailerController.open();
+          trailerToggleBtn.textContent = "Trailer schließen";
+        }
+      });
 
       if (runtime) {
         const meta = document.createElement("div");
@@ -574,6 +734,8 @@ function renderRecommendations(container, recs) {
         body.textContent = reason;
         card.append(body);
       }
+
+      card.append(trailerController.drawer);
 
       const feedbackRow = document.createElement("div");
       feedbackRow.className = "rec-feedback-row";
