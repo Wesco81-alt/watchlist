@@ -712,3 +712,254 @@ async function fetchGeminiRecommendations({ apiKey, mood, availMode, searchEnabl
 
 initializeRecommendationCountSetting();
 initializeHistoryView();
+
+(function () {
+  const QUICK_PRESETS = [
+    {
+      id: "movie_evening",
+      label: "Abendfüllender Film",
+      moodText: "Abendfüllender Spielfilm mit rundem Spannungsbogen",
+      promptHint: "Bevorzuge ausdrücklich Spielfilme (type: 'Film') mit stimmiger Dramaturgie für einen kompletten Filmabend."
+    },
+    {
+      id: "miniseries",
+      label: "Miniserie zum Wegschauen",
+      moodText: "Kompakte Serie oder Miniserie mit Sogwirkung",
+      promptHint: "Bevorzuge ausdrücklich Serien (type: 'Serie'), idealerweise kompakte Staffeln oder Miniserien mit hohem Sog."
+    },
+    {
+      id: "last_super",
+      label: "Wie letztes ‚Finde ich super‘",
+      moodText: "",
+      promptHint: "",
+      resolveDynamic: () => {
+        const ratingMap = typeof seenRatings === "object" && seenRatings ? seenRatings : {};
+        const entries = Array.isArray(typeof seenEntries !== "undefined" ? seenEntries : null) ? seenEntries : [];
+
+        const matchedFromEntries = [...entries]
+          .reverse()
+          .find((entry) => {
+            const title = String(entry?.title || "").trim();
+            if (!title) return false;
+            const rating = typeof getTitleRating === "function"
+              ? getTitleRating(title)
+              : ratingMap[title.toLocaleLowerCase("de-DE")];
+            return rating === "Finde ich super";
+          });
+
+        let anchorTitle = matchedFromEntries?.title ? String(matchedFromEntries.title).trim() : "";
+
+        if (!anchorTitle) {
+          const superKeys = Object.keys(ratingMap).filter((k) => ratingMap[k] === "Finde ich super");
+          const lastKey = superKeys[superKeys.length - 1] || "";
+          const fromEntriesByKey = entries.find(
+            (entry) => String(entry?.title || "").trim().toLocaleLowerCase("de-DE") === lastKey
+          );
+          anchorTitle = fromEntriesByKey?.title ? String(fromEntriesByKey.title).trim() : lastKey;
+        }
+
+        if (!anchorTitle) {
+          return {
+            moodText: "Starke Favoriten-Richtung",
+            promptHint: "Orientier dich besonders eng an den bestbewerteten Titeln ('Finde ich super')."
+          };
+        }
+
+        return {
+          moodText: "Nahe an „" + anchorTitle + "“",
+          promptHint:
+            "Orientier dich ganz besonders an der Stimmung, Dramaturgie, Tonalität und den thematischen Referenzen von „" +
+            anchorTitle +
+            "“ (bewertet mit 'Finde ich super'), ohne diesen Titel selbst vorzuschlagen."
+        };
+      }
+    },
+    {
+      id: "fresh_angle",
+      label: "Etwas Neues wagen",
+      moodText: "Frischer Blickwinkel, überraschend aber passend",
+      promptHint: "Bringe bewusst eine frische thematische oder erzählerische Note ein, die zum Geschmack passt, aber nicht wie eine bloße Wiederholung wirkt."
+    },
+    {
+      id: "under_two_hours",
+      label: "Unter 2 Stunden",
+      moodText: "Kompakter Film unter 2 Stunden ohne Überlänge",
+      promptHint: "Bevorzuge nach Möglichkeit Filme mit einer Laufzeit unter 120 Minuten (unter 2 Stunden), straff erzählt und ohne unnötige Längen."
+    },
+    {
+      id: "doc_true_crime",
+      label: "Doku oder True Crime",
+      moodText: "Dokumentation oder True Crime mit echtem Hintergrund",
+      promptHint: "Bevorzuge Dokumentationen, Reportagen oder True-Crime-Formate mit substanzieller Recherche oder realem Fallbezug statt rein fiktionaler Stoffe."
+    },
+    {
+      id: "psychological_dense",
+      label: "Psychologisch & dicht",
+      moodText: "Psychologisch dicht, figurengetrieben und spannungsvoll",
+      promptHint: "Setze auf psychologische Tiefe, Figurenkonflikte, innere Spannung und vielschichtige zwischenmenschliche Dynamiken statt reiner Action."
+    },
+    {
+      id: "travel_nature_wide",
+      label: "Reise, Natur & Weite",
+      moodText: "Reise-, Natur- oder Landschaftsmotive mit Weite",
+      promptHint: "Greife Reise-, Natur-, Landschafts- oder Unterwegs-Motive und prägnante Schauplätze auf, ohne in Kitsch, bloße Postkartenbilder oder Übernatürliches abzudriften."
+    },
+    {
+      id: "watchlist_gems",
+      label: "Versteckte Perlen aus der Merkliste",
+      moodText: "Passende Auswahl aus der bestehenden Merkliste",
+      promptHint: "Wähle vorrangig passende Titel aus der bereits vorhandenen 'Aktuellen Merkliste' aus (sofern Einträge vorhanden sind) und begründe, warum gerade sie zum Wunsch und Geschmacksprofil passen."
+    }
+  ];
+
+  let activeExtraPromptHint = "";
+  let resetTimerId = null;
+
+  function scheduleHintReset() {
+    if (resetTimerId) {
+      clearTimeout(resetTimerId);
+    }
+    resetTimerId = setTimeout(() => {
+      activeExtraPromptHint = "";
+      resetTimerId = null;
+    }, 1500);
+  }
+
+  const baseBuildPrompt = typeof buildGeminiPrompt === "function" ? buildGeminiPrompt : null;
+  if (baseBuildPrompt && !baseBuildPrompt.__modesWrapped) {
+    const wrappedBuildPrompt = function (params) {
+      const isWatchlistGems = activeExtraPromptHint.includes("Aktuellen Merkliste");
+      const effectiveParams = isWatchlistGems
+        ? { ...params, recentRecommendationTitles: [] }
+        : params;
+      const prompt = baseBuildPrompt.call(this, effectiveParams);
+      if (!activeExtraPromptHint) return prompt;
+      return prompt + " Zusätzlicher Empfehlungs-Fokus: " + activeExtraPromptHint;
+    };
+    wrappedBuildPrompt.__modesWrapped = true;
+    window.buildGeminiPrompt = wrappedBuildPrompt;
+  }
+
+  function triggerFollowUpRecommendation(extraHint, statusLabel) {
+    const recBtn = document.getElementById("recommendBtn");
+    const statusEl = document.getElementById("aiStatus");
+    if (!recBtn) return;
+
+    activeExtraPromptHint = extraHint || "";
+    if (statusEl && statusLabel) {
+      statusEl.textContent = statusLabel;
+    }
+    recBtn.click();
+    scheduleHintReset();
+  }
+
+  function appendClusterFollowUpButtons(container) {
+    if (!container) return;
+
+    container.querySelectorAll(".cluster-block").forEach((block) => {
+      const header = block.querySelector(".cluster-header");
+      const titleEl = block.querySelector(".cluster-title");
+      const descEl = block.querySelector(".cluster-desc");
+      if (!header || !titleEl || header.querySelector(".cluster-followup-actions")) return;
+
+      const clusterName = (titleEl.textContent || "").trim();
+      const clusterDesc = (descEl?.textContent || "").trim();
+
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "actions cluster-followup-actions";
+      actionsWrap.style.marginTop = "8px";
+
+      const moreBtn = document.createElement("button");
+      moreBtn.type = "button";
+      moreBtn.className = "secondary cluster-followup-btn";
+      moreBtn.textContent = "Mehr wie dieses Cluster";
+      moreBtn.addEventListener("click", () => {
+        const hint =
+          "Schlage weitere Titel im Cluster-Stil „" +
+          clusterName +
+          "“ vor" +
+          (clusterDesc ? " (" + clusterDesc + ")" : "") +
+          ".";
+        triggerFollowUpRecommendation(hint, "Suche weitere Titel passend zu „" + clusterName + "“...");
+      });
+
+      const calmerBtn = document.createElement("button");
+      calmerBtn.type = "button";
+      calmerBtn.className = "secondary cluster-followup-btn";
+      calmerBtn.textContent = "Ruhiger & düsterer";
+      calmerBtn.addEventListener("click", () => {
+        const hint =
+          "Bleib grob in der Richtung von „" +
+          clusterName +
+          "“, aber wähle ruhigere, bedachtere und düsterere Stoffe mit weniger Hektik.";
+        triggerFollowUpRecommendation(hint, "Suche ruhigere, düsterere Titel zu „" + clusterName + "“...");
+      });
+
+      actionsWrap.append(moreBtn, calmerBtn);
+      header.append(actionsWrap);
+    });
+  }
+
+  const baseRenderRecs = typeof renderRecommendations === "function" ? renderRecommendations : null;
+  if (baseRenderRecs && !baseRenderRecs.__modesWrapped) {
+    const wrappedRenderRecs = function (container, recs) {
+      baseRenderRecs.call(this, container, recs);
+      if (Array.isArray(recs) && recs.length > 0) {
+        appendClusterFollowUpButtons(container);
+      }
+    };
+    wrappedRenderRecs.__modesWrapped = true;
+    window.renderRecommendations = wrappedRenderRecs;
+  }
+
+  function initQuickPresets() {
+    const moodEl = document.getElementById("moodInput");
+    const recBtn = document.getElementById("recommendBtn");
+    if (!moodEl || !recBtn || document.getElementById("quickPresetsBar")) return;
+
+    const bar = document.createElement("div");
+    bar.id = "quickPresetsBar";
+    bar.className = "actions";
+    bar.style.marginTop = "10px";
+    bar.style.flexWrap = "wrap";
+
+    QUICK_PRESETS.forEach((preset) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "secondary";
+      btn.textContent = preset.label;
+      btn.addEventListener("click", () => {
+        const resolved = typeof preset.resolveDynamic === "function" ? preset.resolveDynamic() : preset;
+        const currentMood = moodEl.value.trim();
+        if (resolved.moodText) {
+          moodEl.value = currentMood && !currentMood.includes(resolved.moodText)
+            ? currentMood + " – " + resolved.moodText
+            : resolved.moodText;
+        }
+        activeExtraPromptHint = resolved.promptHint || "";
+        moodEl.focus();
+      });
+      bar.append(btn);
+    });
+
+    const aiTopRow = moodEl.closest(".row.ai-top");
+    if (aiTopRow) {
+      aiTopRow.insertAdjacentElement("afterend", bar);
+    } else {
+      moodEl.insertAdjacentElement("afterend", bar);
+    }
+
+    if (!recBtn.dataset.presetResetBound) {
+      recBtn.dataset.presetResetBound = "true";
+      recBtn.addEventListener("click", () => {
+        scheduleHintReset();
+      });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initQuickPresets);
+  } else {
+    initQuickPresets();
+  }
+})();
