@@ -12,6 +12,7 @@ const GEMINI_PREFERRED_MODEL_STORAGE = "watchlist_kurator_gemini_preferred_model
 const RECOMMENDATION_HISTORY_STORAGE = "watchlist_kurator_recommendation_history_v1";
 const RECOMMENDATION_COUNT_STORAGE = "watchlist_kurator_recommendation_count_v1";
 const DYNAMIC_PRESETS_STORAGE = "watchlist_kurator_dynamic_presets_v1";
+const DYNAMIC_PRESETS_META_STORAGE = "watchlist_kurator_dynamic_presets_meta_v1";
 const RECOMMENDATION_COOLDOWN_DAYS = 60;
 const RECOMMENDATION_HISTORY_MAX = 500;
 const DEFAULT_RECOMMENDATION_COUNT = 4;
@@ -1029,6 +1030,178 @@ initializeHistoryView();
 
   let activeExtraPromptHint = "";
   let resetTimerId = null;
+  let memoryDynamicPresets = [];
+  let memoryDynamicMeta = null;
+
+  function logPresetDebug(msg) {
+    if (typeof debugLog === "function") {
+      debugLog("[Zufalls-Presets] " + msg);
+    }
+  }
+
+  function sanitizePresetList(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((item) => item && String(item.label || "").trim() && String(item.moodText || "").trim())
+      .slice(0, 8)
+      .map((item, idx) => ({
+        id: String(item.id || ("dyn_" + idx + "_" + String(item.label).trim().slice(0, 12))),
+        label: String(item.label).trim().slice(0, 32),
+        moodText: String(item.moodText).trim(),
+        promptHint: String(item.promptHint || item.moodText).trim()
+      }));
+  }
+
+  function loadStoredDynamicPresets() {
+    let parsedPresets = [];
+    let storageReadable = true;
+    let hadCorruptPayload = false;
+
+    try {
+      const rawStr = localStorage.getItem(DYNAMIC_PRESETS_STORAGE);
+      if (rawStr) {
+        const parsed = JSON.parse(rawStr);
+        parsedPresets = sanitizePresetList(parsed);
+        if (parsedPresets.length === 0) {
+          hadCorruptPayload = true;
+        }
+      }
+    } catch {
+      storageReadable = false;
+      hadCorruptPayload = true;
+    }
+
+    let parsedMeta = null;
+    try {
+      const metaStr = localStorage.getItem(DYNAMIC_PRESETS_META_STORAGE);
+      if (metaStr) {
+        const metaObj = JSON.parse(metaStr);
+        if (metaObj && typeof metaObj === "object") {
+          parsedMeta = {
+            savedAt: String(metaObj.savedAt || ""),
+            source: String(metaObj.source || "gespeichert"),
+            model: String(metaObj.model || "")
+          };
+        }
+      }
+    } catch {
+      parsedMeta = null;
+    }
+
+    if (parsedPresets.length > 0) {
+      memoryDynamicPresets = parsedPresets;
+      memoryDynamicMeta = parsedMeta || { savedAt: "", source: "gespeichert", model: "" };
+      logPresetDebug("Aus localStorage geladen: " + parsedPresets.length + " Zufalls-Presets.");
+      return { presets: parsedPresets, meta: memoryDynamicMeta, storageReadable, restoredFromMemory: false, hadCorruptPayload: false };
+    }
+
+    if (memoryDynamicPresets.length > 0) {
+      logPresetDebug("localStorage leer, nutze Session-Speicher (" + memoryDynamicPresets.length + " Presets).");
+      return { presets: memoryDynamicPresets, meta: memoryDynamicMeta, storageReadable, restoredFromMemory: true, hadCorruptPayload };
+    }
+
+    return { presets: [], meta: null, storageReadable, restoredFromMemory: false, hadCorruptPayload };
+  }
+
+  function saveStoredDynamicPresets(presets, metaInfo = {}) {
+    const clean = sanitizePresetList(presets);
+    memoryDynamicPresets = clean;
+    const meta = {
+      savedAt: new Date().toISOString(),
+      source: String(metaInfo.source || (metaInfo.usedFallback ? "lokal" : "ki")),
+      model: String(metaInfo.model || "")
+    };
+    memoryDynamicMeta = meta;
+
+    if (clean.length === 0) {
+      try {
+        localStorage.removeItem(DYNAMIC_PRESETS_STORAGE);
+        localStorage.removeItem(DYNAMIC_PRESETS_META_STORAGE);
+      } catch {
+        // Ignorieren
+      }
+      return { persisted: false, count: 0, meta };
+    }
+
+    try {
+      const serialized = JSON.stringify(clean);
+      localStorage.setItem(DYNAMIC_PRESETS_STORAGE, serialized);
+      localStorage.setItem(DYNAMIC_PRESETS_META_STORAGE, JSON.stringify(meta));
+      const verified = sanitizePresetList(JSON.parse(localStorage.getItem(DYNAMIC_PRESETS_STORAGE) || "[]"));
+      const persisted = verified.length === clean.length;
+      logPresetDebug(persisted
+        ? "In localStorage gespeichert & verifiziert (" + clean.length + " Presets)."
+        : "Warnung: localStorage-Verifikation fehlgeschlagen, nur im Arbeitsspeicher aktiv.");
+      return { persisted, count: clean.length, meta };
+    } catch (err) {
+      logPresetDebug("localStorage blockiert/fehlerhaft (" + (err?.message || "unbekannt") + ") -> nur im Arbeitsspeicher aktiv.");
+      return { persisted: false, count: clean.length, meta };
+    }
+  }
+
+  function clearStoredDynamicPresets() {
+    memoryDynamicPresets = [];
+    memoryDynamicMeta = null;
+    try {
+      localStorage.removeItem(DYNAMIC_PRESETS_STORAGE);
+      localStorage.removeItem(DYNAMIC_PRESETS_META_STORAGE);
+      logPresetDebug("Gespeicherte Zufalls-Presets gelöscht.");
+    } catch {
+      // Ignorieren
+    }
+  }
+
+  function formatPresetSavedTime(isoStr) {
+    if (!isoStr) return "";
+    const d = new Date(isoStr);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  function ensurePresetStatusBadge(bar) {
+    let badge = document.getElementById("presetPersistenceStatus");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.id = "presetPersistenceStatus";
+      badge.className = "meta";
+      badge.style.width = "100%";
+      badge.style.marginTop = "4px";
+      bar.append(badge);
+    }
+    return badge;
+  }
+
+  function updatePresetPersistenceBadge(bar, { isDynamicSet, count, meta, persisted = true, restoredFromMemory = false, hadCorruptPayload = false }) {
+    const badge = ensurePresetStatusBadge(bar);
+    if (!isDynamicSet) {
+      badge.textContent = hadCorruptPayload
+        ? "Modus: Standard-Presets (defekter Zufalls-Preset-Eintrag wurde bereinigt)."
+        : "Modus: Standard-Presets aktiv.";
+      return;
+    }
+
+    const parts = ["Zufalls-Presets aktiv (" + count + ")"];
+    if (meta?.source === "ki" && meta?.model) {
+      parts.push("Quelle: KI (" + meta.model + ")");
+    } else if (meta?.source === "lokal") {
+      parts.push("Quelle: Lokaler Fallback");
+    }
+    const timeLabel = formatPresetSavedTime(meta?.savedAt);
+    if (timeLabel) {
+      parts.push("Stand: " + timeLabel);
+    }
+    if (!persisted || restoredFromMemory) {
+      parts.push("Hinweis: Nur im aktuellen Browser-Tab gespeichert (localStorage ggf. blockiert/gelöscht)");
+    } else {
+      parts.push("Dauerhaft lokal gespeichert");
+    }
+    badge.textContent = parts.join(" · ");
+  }
 
   function scheduleHintReset() {
     if (resetTimerId) {
@@ -1132,32 +1305,6 @@ initializeHistoryView();
     window.renderRecommendations = wrappedRenderRecs;
   }
 
-  function loadStoredDynamicPresets() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(DYNAMIC_PRESETS_STORAGE) || "[]");
-      if (!Array.isArray(raw)) return [];
-      return raw
-        .filter((item) => item && item.label && item.moodText)
-        .slice(0, 8)
-        .map((item, idx) => ({
-          id: "dyn_" + idx + "_" + String(item.label).slice(0, 12),
-          label: String(item.label).trim().slice(0, 32),
-          moodText: String(item.moodText).trim(),
-          promptHint: String(item.promptHint || item.moodText).trim()
-        }));
-    } catch {
-      return [];
-    }
-  }
-
-  function saveStoredDynamicPresets(presets) {
-    localStorage.setItem(DYNAMIC_PRESETS_STORAGE, JSON.stringify(presets));
-  }
-
-  function clearStoredDynamicPresets() {
-    localStorage.removeItem(DYNAMIC_PRESETS_STORAGE);
-  }
-
   function buildDynamicPresetsPrompt(count = 5) {
     const seed = RANDOM_SEEDS[Math.floor(Math.random() * RANDOM_SEEDS.length)];
     const ratingMap = typeof seenRatings === "object" && seenRatings ? seenRatings : {};
@@ -1233,15 +1380,10 @@ initializeHistoryView();
         const cleaned = typeof extractJsonArrayText === "function" ? extractJsonArrayText(text) : text;
         const parsed = JSON.parse(cleaned);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const normalized = parsed
-            .filter((item) => item && item.label && item.moodText)
-            .slice(0, count)
-            .map((item, idx) => ({
-              id: "dyn_" + Date.now() + "_" + idx,
-              label: String(item.label).trim().slice(0, 32),
-              moodText: String(item.moodText).trim(),
-              promptHint: String(item.promptHint || item.moodText).trim()
-            }));
+          const normalized = sanitizePresetList(parsed).slice(0, count).map((item, idx) => ({
+            ...item,
+            id: "dyn_" + Date.now() + "_" + idx
+          }));
           if (normalized.length > 0) {
             return { presets: normalized, usedFallback: false, model };
           }
@@ -1255,11 +1397,12 @@ initializeHistoryView();
     return { presets: shuffled, usedFallback: true, reason: "KI-Antwort nicht verwertbar" };
   }
 
-  function renderPresetBarButtons(bar, presets, moodEl, statusEl, isDynamicSet) {
+  function renderPresetBarButtons(bar, presets, moodEl, statusEl, isDynamicSet, badgeInfo = {}) {
     const recBtn = document.getElementById("recommendBtn");
     bar.querySelectorAll("button[data-preset-item='true']").forEach((el) => el.remove());
 
     const rollBtn = bar.querySelector("button[data-roll-presets='true']");
+    const badgeEl = ensurePresetStatusBadge(bar);
     let resetBtn = bar.querySelector("button[data-reset-presets='true']");
 
     if (isDynamicSet && !resetBtn) {
@@ -1273,11 +1416,13 @@ initializeHistoryView();
         clearStoredDynamicPresets();
         activeExtraPromptHint = "";
         window.__activeDynamicPresetHint = "";
-        renderPresetBarButtons(bar, QUICK_PRESETS, moodEl, statusEl, false);
+        renderPresetBarButtons(bar, QUICK_PRESETS, moodEl, statusEl, false, { hadCorruptPayload: false });
         if (statusEl) statusEl.textContent = "Standard-Presets wiederhergestellt.";
       });
       if (rollBtn) {
         bar.insertBefore(resetBtn, rollBtn);
+      } else if (badgeEl) {
+        bar.insertBefore(resetBtn, badgeEl);
       } else {
         bar.append(resetBtn);
       }
@@ -1314,12 +1459,21 @@ initializeHistoryView();
         moodEl.focus();
       });
 
-      const insertBeforeTarget = resetBtn || rollBtn;
+      const insertBeforeTarget = resetBtn || rollBtn || badgeEl;
       if (insertBeforeTarget) {
         bar.insertBefore(btn, insertBeforeTarget);
       } else {
         bar.append(btn);
       }
+    });
+
+    updatePresetPersistenceBadge(bar, {
+      isDynamicSet,
+      count: presets.length,
+      meta: badgeInfo.meta || memoryDynamicMeta,
+      persisted: badgeInfo.persisted !== undefined ? badgeInfo.persisted : true,
+      restoredFromMemory: Boolean(badgeInfo.restoredFromMemory),
+      hadCorruptPayload: Boolean(badgeInfo.hadCorruptPayload)
     });
 
     if (recBtn && !recBtn.dataset.presetResetBound) {
@@ -1352,6 +1506,8 @@ initializeHistoryView();
       }
     }
 
+    const badgeEl = ensurePresetStatusBadge(bar);
+
     if (!bar.querySelector("button[data-roll-presets='true']")) {
       const rollBtn = document.createElement("button");
       rollBtn.type = "button";
@@ -1365,25 +1521,39 @@ initializeHistoryView();
         if (statusEl) statusEl.textContent = "Generiere neue Zufalls-Presets per KI...";
 
         const result = await generateRandomPresetsFromGemini(5);
-        saveStoredDynamicPresets(result.presets);
-        renderPresetBarButtons(bar, result.presets, moodEl, statusEl, true);
+        const saveInfo = saveStoredDynamicPresets(result.presets, {
+          source: result.usedFallback ? "lokal" : "ki",
+          model: result.model || "",
+          usedFallback: result.usedFallback
+        });
+        renderPresetBarButtons(bar, result.presets, moodEl, statusEl, true, {
+          meta: saveInfo.meta,
+          persisted: saveInfo.persisted
+        });
 
         if (statusEl) {
+          const persistNote = saveInfo.persisted ? " und gespeichert." : " (nur temporär im Tab aktiv).";
           statusEl.textContent = result.usedFallback
-            ? "Lokale Zufalls-Presets geladen (" + result.reason + ")."
-            : "Neue KI-Zufalls-Presets erstellt (" + result.model + ").";
+            ? "Lokale Zufalls-Presets geladen (" + result.reason + ")" + persistNote
+            : "Neue KI-Zufalls-Presets erstellt (" + result.model + ")" + persistNote;
         }
         rollBtn.textContent = prevText;
         rollBtn.disabled = false;
       });
 
-      bar.append(rollBtn);
+      bar.insertBefore(rollBtn, badgeEl);
 
-      const stored = loadStoredDynamicPresets();
-      if (stored.length > 0) {
-        renderPresetBarButtons(bar, stored, moodEl, statusEl, true);
+      const loaded = loadStoredDynamicPresets();
+      if (loaded.presets.length > 0) {
+        renderPresetBarButtons(bar, loaded.presets, moodEl, statusEl, true, {
+          meta: loaded.meta,
+          persisted: loaded.storageReadable && !loaded.restoredFromMemory,
+          restoredFromMemory: loaded.restoredFromMemory
+        });
       } else {
-        renderPresetBarButtons(bar, QUICK_PRESETS, moodEl, statusEl, false);
+        renderPresetBarButtons(bar, QUICK_PRESETS, moodEl, statusEl, false, {
+          hadCorruptPayload: loaded.hadCorruptPayload
+        });
       }
     }
   }
