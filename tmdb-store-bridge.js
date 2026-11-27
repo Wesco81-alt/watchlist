@@ -95,17 +95,29 @@ function logInfo(msg) {
   }
 }
 
-function normalizeProviderLabel(rawName) {
+function mapAliasOrExact(rawName) {
   const clean = String(rawName || "").trim();
   if (!clean) return "";
-  return mapTmdbProviderNameToCurator(clean) || clean;
+  const lower = clean.toLowerCase();
+
+  if (TMDB_TO_CURATOR_PROVIDER_MAP[lower]) {
+    return TMDB_TO_CURATOR_PROVIDER_MAP[lower];
+  }
+
+  for (const [alias, curatorProvider] of Object.entries(TMDB_TO_CURATOR_PROVIDER_MAP)) {
+    if (lower.includes(alias)) {
+      return curatorProvider;
+    }
+  }
+
+  return clean;
 }
 
 function dedupeProviderList(list) {
   const result = [];
   const seen = new Set();
   for (const item of Array.isArray(list) ? list : []) {
-    const label = normalizeProviderLabel(item);
+    const label = mapAliasOrExact(item);
     if (!label) continue;
     const key = label.toLowerCase();
     if (!seen.has(key)) {
@@ -131,7 +143,7 @@ function getActiveCuratorProviders() {
     const picked = [];
     const seen = new Set();
     for (const raw of Array.isArray(arr) ? arr : []) {
-      const norm = normalizeProviderLabel(raw);
+      const norm = mapAliasOrExact(raw);
       const canonical = allowedMap.get(norm.toLowerCase());
       if (canonical && !seen.has(canonical.toLowerCase())) {
         seen.add(canonical.toLowerCase());
