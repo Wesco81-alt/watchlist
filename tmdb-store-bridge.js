@@ -13,6 +13,46 @@ import {
 } from "./store.js";
 
 const TMDB_API_KEY_STORAGE = "watchlist_kurator_tmdb_key_v1";
+const ACTIVE_PROVIDERS_STORAGE_KEY = "watchlist_kurator_active_providers_v1";
+
+const DEFAULT_CURATOR_PROVIDERS = [
+  "Sky",
+  "Netflix",
+  "ARD",
+  "ZDF",
+  "Tresat",
+  "Joyn",
+  "Netzkino",
+  "Prime Video",
+  "HBO Max",
+  "Apple TV",
+  "Rakuten TV",
+  "Sonstiges"
+];
+
+const TMDB_TO_CURATOR_PROVIDER_MAP = {
+  "netflix": "Netflix",
+  "netflix standard with ads": "Netflix",
+  "sky go": "Sky",
+  "sky show": "Sky",
+  "wow": "Sky",
+  "ard mediathek": "ARD",
+  "das erste": "ARD",
+  "zdf": "ZDF",
+  "zdf mediathek": "ZDF",
+  "3sat": "Tresat",
+  "tresat": "Tresat",
+  "joyn": "Joyn",
+  "joyn plus+": "Joyn",
+  "netzkino": "Netzkino",
+  "amazon prime video": "Prime Video",
+  "prime video": "Prime Video",
+  "hbo max": "HBO Max",
+  "max": "HBO Max",
+  "apple tv": "Apple TV",
+  "apple tv+": "Apple TV",
+  "rakuten tv": "Rakuten TV"
+};
 
 function getStoredTmdbKey() {
   try {
@@ -42,6 +82,95 @@ function logInfo(msg) {
   }
 }
 
+function getCuratorProviders() {
+  if (Array.isArray(window.PROVIDERS) && window.PROVIDERS.length > 0) {
+    return window.PROVIDERS.filter((p) => p && p !== "Sonstiges");
+  }
+  return DEFAULT_CURATOR_PROVIDERS.filter((p) => p !== "Sonstiges");
+}
+
+function getActiveCuratorProviders() {
+  const allowed = new Set(getCuratorProviders());
+
+  if (Array.isArray(window.enabledProviders)) {
+    const active = window.enabledProviders.filter((p) => allowed.has(p));
+    if (active.length > 0) return active;
+  }
+
+  try {
+    const raw = localStorage.getItem(ACTIVE_PROVIDERS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const active = parsed.filter((p) => allowed.has(p));
+        if (active.length > 0) return active;
+      }
+    }
+  } catch {
+    // Ignorieren
+  }
+
+  return getCuratorProviders();
+}
+
+function mapTmdbProviderNameToCurator(rawName) {
+  const clean = String(rawName || "").trim().toLowerCase();
+  if (!clean) return null;
+
+  if (TMDB_TO_CURATOR_PROVIDER_MAP[clean]) {
+    return TMDB_TO_CURATOR_PROVIDER_MAP[clean];
+  }
+
+  for (const [alias, curatorProvider] of Object.entries(TMDB_TO_CURATOR_PROVIDER_MAP)) {
+    if (clean.includes(alias)) {
+      return curatorProvider;
+    }
+  }
+
+  const allCurator = getCuratorProviders();
+  const directMatch = allCurator.find((p) => p.toLowerCase() === clean);
+  return directMatch || null;
+}
+
+function getMatchedCuratorProviderBadges(enriched) {
+  const buckets = [
+    ...(Array.isArray(enriched?.availabilityDE?.flatrate) ? enriched.availabilityDE.flatrate : []),
+    ...(Array.isArray(enriched?.availabilityDE?.free) ? enriched.availabilityDE.free : []),
+    ...(Array.isArray(enriched?.availabilityDE?.ads) ? enriched.availabilityDE.ads : []),
+    ...(Array.isArray(enriched?.availabilityDE?.rent) ? enriched.availabilityDE.rent : []),
+    ...(Array.isArray(enriched?.availabilityDE?.buy) ? enriched.availabilityDE.buy : [])
+  ];
+
+  const activeProviders = new Set(getActiveCuratorProviders());
+  const matched = [];
+
+  for (const entry of buckets) {
+    const mapped = mapTmdbProviderNameToCurator(entry?.name || "");
+    if (mapped && activeProviders.has(mapped) && !matched.includes(mapped)) {
+      matched.push(mapped);
+    }
+  }
+
+  return matched;
+}
+
+function createCuratorProviderBadge(providerName) {
+  const badge = document.createElement("span");
+  badge.className = "provider-pill tmdb-curator-badge";
+  badge.textContent = providerName;
+  badge.title = "Verfügbar über Kurator-Anbieter: " + providerName;
+  return badge;
+}
+
+function appendCuratorBadgesToTarget(targetEl, badges) {
+  if (!targetEl || !Array.isArray(badges) || badges.length === 0) return;
+
+  targetEl.querySelectorAll(".tmdb-curator-badge").forEach((el) => el.remove());
+  badges.forEach((providerName) => {
+    targetEl.append(createCuratorProviderBadge(providerName));
+  });
+}
+
 function refreshTmdbKeyUi() {
   const input = document.getElementById("tmdbApiKeyInput");
   const hint = document.getElementById("tmdbKeyHint");
@@ -53,7 +182,7 @@ function refreshTmdbKeyUi() {
 
   if (hint) {
     hint.textContent = key
-      ? "TMDB-API-Schlüssel lokal gespeichert (aktiv für Metadaten, Poster & DE-Anbieter)."
+      ? "TMDB-API-Schlüssel lokal gespeichert (aktiv für Metadaten, Poster & Kurator-Anbieter)."
       : "Kein TMDB-API-Schlüssel gespeichert.";
   }
 }
@@ -100,9 +229,7 @@ function renderPosterPreview(enriched, fallbackTitle = "") {
   const ratingText = typeof enriched?.meta?.voteAverage === "number"
     ? ` · TMDB ${enriched.meta.voteAverage}`
     : "";
-  const flatrateNames = Array.isArray(enriched?.availabilityDE?.flatrate)
-    ? enriched.availabilityDE.flatrate.map((p) => p.name).filter(Boolean)
-    : [];
+  const curatorBadges = getMatchedCuratorProviderBadges(enriched);
 
   box.innerHTML = "";
 
@@ -156,12 +283,14 @@ function renderPosterPreview(enriched, fallbackTitle = "") {
   heading.textContent = titleText + yearText + ratingText;
   info.append(heading);
 
-  if (flatrateNames.length > 0) {
-    const prov = document.createElement("div");
-    prov.className = "meta";
-    prov.style.marginTop = "4px";
-    prov.textContent = "DE-Abo (Flatrate): " + flatrateNames.join(", ");
-    info.append(prov);
+  if (curatorBadges.length > 0) {
+    const badgeRow = document.createElement("div");
+    badgeRow.style.display = "flex";
+    badgeRow.style.gap = "6px";
+    badgeRow.style.flexWrap = "wrap";
+    badgeRow.style.marginTop = "6px";
+    appendCuratorBadgesToTarget(badgeRow, curatorBadges);
+    info.append(badgeRow);
   }
 
   if (enriched?.meta?.overview) {
@@ -192,7 +321,7 @@ async function runPosterLookup(title, type = "tv", year = null) {
     return;
   }
 
-  if (hint) hint.textContent = `Lade Poster & DE-Daten für „${cleanTitle}“...`;
+  if (hint) hint.textContent = `Lade Poster & Kurator-Anbieter für „${cleanTitle}“...`;
   logInfo(`TMDB-Poster-Abruf gestartet für: "${cleanTitle}" (${type}${year ? ", " + year : ""})`);
 
   try {
@@ -273,65 +402,52 @@ function ensurePosterPreviewControls() {
   }
 }
 
-function getProviderNamesFromEnriched(enriched) {
-  const flatrate = Array.isArray(enriched?.availabilityDE?.flatrate)
-    ? enriched.availabilityDE.flatrate.map((p) => p.name).filter(Boolean)
-    : [];
-  const free = Array.isArray(enriched?.availabilityDE?.free)
-    ? enriched.availabilityDE.free.map((p) => p.name).filter(Boolean)
-    : [];
-  return Array.from(new Set([...flatrate, ...free]));
-}
-
-function applyPosterAndProvidersToCard(card, enriched) {
+function applyPosterAndBadgesToRecCard(card, enriched) {
   if (!card || !enriched) return;
 
   const posterPath = enriched?.meta?.posterPath || null;
   const posterUrl = posterPath ? buildPosterUrl(posterPath, "w500") : null;
-  const providerNames = getProviderNamesFromEnriched(enriched);
+  const curatorBadges = getMatchedCuratorProviderBadges(enriched);
 
-  let mediaRow = card.querySelector(".tmdb-rec-enrichment");
-  if (!mediaRow && (posterUrl || providerNames.length > 0)) {
-    mediaRow = document.createElement("div");
-    mediaRow.className = "tmdb-rec-enrichment";
-    mediaRow.style.display = "flex";
-    mediaRow.style.gap = "14px";
-    mediaRow.style.alignItems = "flex-start";
-    mediaRow.style.flexWrap = "wrap";
-    mediaRow.style.marginTop = "6px";
+  const headTitleContainer = card.querySelector(".rec-head > div:first-child");
+  if (headTitleContainer && curatorBadges.length > 0) {
+    appendCuratorBadgesToTarget(headTitleContainer, curatorBadges);
+  }
+
+  let posterRow = card.querySelector(".tmdb-rec-poster-row");
+  if (!posterRow && posterUrl) {
+    posterRow = document.createElement("div");
+    posterRow.className = "tmdb-rec-poster-row";
+    posterRow.style.display = "flex";
+    posterRow.style.gap = "14px";
+    posterRow.style.alignItems = "flex-start";
+    posterRow.style.flexWrap = "wrap";
+    posterRow.style.marginTop = "6px";
 
     const head = card.querySelector(".rec-head");
     if (head && head.nextSibling) {
-      card.insertBefore(mediaRow, head.nextSibling);
+      card.insertBefore(posterRow, head.nextSibling);
     } else {
-      card.prepend(mediaRow);
+      card.prepend(posterRow);
     }
   }
 
-  if (!mediaRow) return;
-  mediaRow.innerHTML = "";
+  if (!posterRow) return;
+  posterRow.innerHTML = "";
 
   if (posterUrl) {
     const img = document.createElement("img");
     img.src = posterUrl;
     img.alt = "Poster";
     img.loading = "lazy";
-    img.style.width = "160px";
+    img.style.width = "168px";
     img.style.maxWidth = "100%";
     img.style.height = "auto";
     img.style.aspectRatio = "2 / 3";
     img.style.objectFit = "cover";
     img.style.borderRadius = "8px";
     img.style.flexShrink = "0";
-    mediaRow.append(img);
-  }
-
-  if (providerNames.length > 0) {
-    const info = document.createElement("div");
-    info.className = "meta";
-    info.style.flex = "1 1 200px";
-    info.textContent = "TMDB DE: " + providerNames.slice(0, 6).join(", ");
-    mediaRow.append(info);
+    posterRow.append(img);
   }
 }
 
@@ -355,27 +471,32 @@ async function enrichRecommendationContainer(container) {
         type: typePillText,
         year
       });
-      applyPosterAndProvidersToCard(card, enriched);
+      applyPosterAndBadgesToRecCard(card, enriched);
     } catch (err) {
       logInfo(`TMDB-Anreicherung für „${title}“ fehlgeschlagen: ${err?.message || err}`);
     }
   }
 }
 
-function applyPosterAndOverviewToWatchlistItem(itemEl, enriched) {
+function applyPosterBadgesAndOverviewToListItem(itemEl, enriched, cssClassName, includeProviderBadges = true) {
   if (!itemEl || !enriched) return;
 
   const posterPath = enriched?.meta?.posterPath || null;
   const posterUrl = posterPath ? buildPosterUrl(posterPath, "w500") : null;
   const overview = String(enriched?.meta?.overview || "").trim();
-  const providerNames = getProviderNamesFromEnriched(enriched);
+  const curatorBadges = includeProviderBadges ? getMatchedCuratorProviderBadges(enriched) : [];
 
-  if (!posterUrl && !overview && providerNames.length === 0) return;
+  const titleRow = itemEl.querySelector(":scope > div:first-child > div:first-child");
+  if (titleRow && curatorBadges.length > 0) {
+    appendCuratorBadgesToTarget(titleRow, curatorBadges);
+  }
 
-  let detailBox = itemEl.querySelector(".tmdb-watchlist-details");
+  if (!posterUrl && !overview) return;
+
+  let detailBox = itemEl.querySelector("." + cssClassName);
   if (!detailBox) {
     detailBox = document.createElement("div");
-    detailBox.className = "tmdb-watchlist-details";
+    detailBox.className = cssClassName;
     detailBox.style.width = "100%";
     detailBox.style.display = "flex";
     detailBox.style.gap = "14px";
@@ -394,7 +515,7 @@ function applyPosterAndOverviewToWatchlistItem(itemEl, enriched) {
     img.src = posterUrl;
     img.alt = "Poster zu " + (enriched?.core?.title || "Titel");
     img.loading = "lazy";
-    img.style.width = "148px";
+    img.style.width = "156px";
     img.style.maxWidth = "100%";
     img.style.height = "auto";
     img.style.aspectRatio = "2 / 3";
@@ -407,25 +528,17 @@ function applyPosterAndOverviewToWatchlistItem(itemEl, enriched) {
   const textCol = document.createElement("div");
   textCol.style.flex = "1 1 200px";
 
-  if (providerNames.length > 0) {
-    const provEl = document.createElement("div");
-    provEl.className = "meta";
-    provEl.style.marginTop = "0";
-    provEl.textContent = "TMDB DE: " + providerNames.slice(0, 6).join(", ");
-    textCol.append(provEl);
-  }
-
   if (overview) {
     const summaryEl = document.createElement("div");
-    summaryEl.className = "meta tmdb-watchlist-overview";
-    summaryEl.style.marginTop = providerNames.length > 0 ? "6px" : "0";
+    summaryEl.className = "meta";
+    summaryEl.style.marginTop = "0";
     summaryEl.style.color = "#cbd5e1";
     summaryEl.textContent = overview;
     textCol.append(summaryEl);
   } else {
     const noSummaryEl = document.createElement("div");
     noSummaryEl.className = "meta";
-    noSummaryEl.style.marginTop = providerNames.length > 0 ? "6px" : "0";
+    noSummaryEl.style.marginTop = "0";
     noSummaryEl.textContent = "Keine Inhaltsangabe auf TMDB hinterlegt.";
     textCol.append(noSummaryEl);
   }
@@ -453,14 +566,41 @@ async function enrichWatchlistContainer(container) {
         type: typePillText,
         year
       });
-      applyPosterAndOverviewToWatchlistItem(itemEl, enriched);
+      applyPosterBadgesAndOverviewToListItem(itemEl, enriched, "tmdb-watchlist-details", true);
     } catch (err) {
       logInfo(`TMDB-Merklisten-Anreicherung für „${title}“ fehlgeschlagen: ${err?.message || err}`);
     }
   }
 }
 
-function hookRecommendationRendering() {
+async function enrichSeenContainer(container) {
+  const target = container || document.getElementById("seenContainer");
+  if (!target || !getStoredTmdbKey()) return;
+
+  const itemEls = Array.from(target.querySelectorAll(".item"));
+  for (const itemEl of itemEls) {
+    const titleEl = itemEl.querySelector("strong");
+    const title = (titleEl?.textContent || "").trim();
+    if (!title) continue;
+
+    const typePillText = (itemEl.querySelector(".type-pill")?.textContent || "").trim();
+    const yearMatch = (itemEl.textContent || "").match(/\((\d{4})\)/);
+    const year = yearMatch ? Number(yearMatch[1]) : null;
+
+    try {
+      const enriched = await enrichClassicTitle({
+        title,
+        type: typePillText,
+        year
+      });
+      applyPosterBadgesAndOverviewToListItem(itemEl, enriched, "tmdb-seen-details", true);
+    } catch (err) {
+      logInfo(`TMDB-Gesehen-Anreicherung für „${title}“ fehlgeschlagen: ${err?.message || err}`);
+    }
+  }
+}
+
+function hookRenderingFunctions() {
   if (typeof window.renderRecommendations === "function" && !window.renderRecommendations.__tmdbHooked) {
     const orig = window.renderRecommendations;
     const wrapped = function (container, recs) {
@@ -481,6 +621,17 @@ function hookRecommendationRendering() {
     };
     wrappedList.__tmdbWatchlistHooked = true;
     window.renderList = wrappedList;
+  }
+
+  if (typeof window.renderSeenList === "function" && !window.renderSeenList.__tmdbSeenHooked) {
+    const origSeen = window.renderSeenList;
+    const wrappedSeen = function (...args) {
+      const out = origSeen.apply(this, args);
+      enrichSeenContainer(document.getElementById("seenContainer"));
+      return out;
+    };
+    wrappedSeen.__tmdbSeenHooked = true;
+    window.renderSeenList = wrappedSeen;
   }
 }
 
@@ -519,7 +670,7 @@ function bindTmdbKeyControls() {
 
   ensurePosterPreviewControls();
   refreshTmdbKeyUi();
-  hookRecommendationRendering();
+  hookRenderingFunctions();
 }
 
 window.WatchlistTmdbBridge = {
@@ -534,7 +685,8 @@ window.WatchlistTmdbBridge = {
   runPosterLookup,
   enrichRecommendationContainer,
   enrichWatchlistContainer,
-  hookRecommendationRendering
+  enrichSeenContainer,
+  hookRenderingFunctions
 };
 
 window.WatchlistStoreBridge = {
@@ -554,9 +706,10 @@ function initBridge() {
   bindTmdbKeyControls();
   initStore().catch(() => {});
   setTimeout(() => {
-    hookRecommendationRendering();
+    hookRenderingFunctions();
     enrichRecommendationContainer();
     enrichWatchlistContainer();
+    enrichSeenContainer();
   }, 150);
 }
 
