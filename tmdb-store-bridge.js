@@ -162,13 +162,32 @@ function createCuratorProviderBadge(providerName) {
   return badge;
 }
 
-function appendCuratorBadgesToTarget(targetEl, badges) {
-  if (!targetEl || !Array.isArray(badges) || badges.length === 0) return;
+function renderProviderBadgeLine(parentEl, badges, lineClass = "tmdb-provider-badges-line", insertAfterEl = null) {
+  if (!parentEl) return;
 
-  targetEl.querySelectorAll(".tmdb-curator-badge").forEach((el) => el.remove());
+  parentEl.querySelectorAll("." + lineClass).forEach((el) => el.remove());
+
+  if (!Array.isArray(badges) || badges.length === 0) return;
+
+  const line = document.createElement("div");
+  line.className = lineClass;
+  line.style.display = "flex";
+  line.style.gap = "8px";
+  line.style.flexWrap = "wrap";
+  line.style.alignItems = "center";
+  line.style.width = "100%";
+  line.style.marginTop = "10px";
+  line.style.marginBottom = "4px";
+
   badges.forEach((providerName) => {
-    targetEl.append(createCuratorProviderBadge(providerName));
+    line.append(createCuratorProviderBadge(providerName));
   });
+
+  if (insertAfterEl && insertAfterEl.parentElement === parentEl) {
+    insertAfterEl.insertAdjacentElement("afterend", line);
+  } else {
+    parentEl.append(line);
+  }
 }
 
 function refreshTmdbKeyUi() {
@@ -235,11 +254,11 @@ function renderPosterPreview(enriched, fallbackTitle = "") {
 
   const wrapper = document.createElement("div");
   wrapper.style.display = "flex";
-  wrapper.style.gap = "16px";
+  wrapper.style.gap = "18px";
   wrapper.style.alignItems = "flex-start";
   wrapper.style.flexWrap = "wrap";
-  wrapper.style.marginTop = "12px";
-  wrapper.style.padding = "12px";
+  wrapper.style.marginTop = "14px";
+  wrapper.style.padding = "14px";
   wrapper.style.borderRadius = "10px";
   wrapper.style.background = "rgba(15, 23, 42, 0.55)";
   wrapper.style.border = "1px solid rgba(148, 163, 184, 0.2)";
@@ -283,20 +302,13 @@ function renderPosterPreview(enriched, fallbackTitle = "") {
   heading.textContent = titleText + yearText + ratingText;
   info.append(heading);
 
-  if (curatorBadges.length > 0) {
-    const badgeRow = document.createElement("div");
-    badgeRow.style.display = "flex";
-    badgeRow.style.gap = "6px";
-    badgeRow.style.flexWrap = "wrap";
-    badgeRow.style.marginTop = "6px";
-    appendCuratorBadgesToTarget(badgeRow, curatorBadges);
-    info.append(badgeRow);
-  }
+  renderProviderBadgeLine(info, curatorBadges, "tmdb-preview-badges-line", heading);
 
   if (enriched?.meta?.overview) {
     const desc = document.createElement("div");
     desc.className = "meta";
-    desc.style.marginTop = "6px";
+    desc.style.marginTop = "12px";
+    desc.style.lineHeight = "1.55";
     desc.textContent = enriched.meta.overview;
     info.append(desc);
   }
@@ -409,9 +421,12 @@ function applyPosterAndBadgesToRecCard(card, enriched) {
   const posterUrl = posterPath ? buildPosterUrl(posterPath, "w500") : null;
   const curatorBadges = getMatchedCuratorProviderBadges(enriched);
 
+  const head = card.querySelector(".rec-head");
   const headTitleContainer = card.querySelector(".rec-head > div:first-child");
-  if (headTitleContainer && curatorBadges.length > 0) {
-    appendCuratorBadgesToTarget(headTitleContainer, curatorBadges);
+  if (headTitleContainer) {
+    renderProviderBadgeLine(headTitleContainer, curatorBadges, "tmdb-rec-badges-line");
+  } else if (head) {
+    renderProviderBadgeLine(head, curatorBadges, "tmdb-rec-badges-line");
   }
 
   let posterRow = card.querySelector(".tmdb-rec-poster-row");
@@ -419,13 +434,16 @@ function applyPosterAndBadgesToRecCard(card, enriched) {
     posterRow = document.createElement("div");
     posterRow.className = "tmdb-rec-poster-row";
     posterRow.style.display = "flex";
-    posterRow.style.gap = "14px";
+    posterRow.style.gap = "16px";
     posterRow.style.alignItems = "flex-start";
     posterRow.style.flexWrap = "wrap";
-    posterRow.style.marginTop = "6px";
+    posterRow.style.marginTop = "12px";
+    posterRow.style.marginBottom = "4px";
 
-    const head = card.querySelector(".rec-head");
-    if (head && head.nextSibling) {
+    const badgesLine = card.querySelector(".tmdb-rec-badges-line");
+    if (badgesLine && badgesLine.parentElement) {
+      badgesLine.insertAdjacentElement("afterend", posterRow);
+    } else if (head && head.nextSibling) {
       card.insertBefore(posterRow, head.nextSibling);
     } else {
       card.prepend(posterRow);
@@ -487,8 +505,11 @@ function applyPosterBadgesAndOverviewToListItem(itemEl, enriched, cssClassName, 
   const curatorBadges = includeProviderBadges ? getMatchedCuratorProviderBadges(enriched) : [];
 
   const titleRow = itemEl.querySelector(":scope > div:first-child > div:first-child");
-  if (titleRow && curatorBadges.length > 0) {
-    appendCuratorBadgesToTarget(titleRow, curatorBadges);
+  const titleContainer = itemEl.querySelector(":scope > div:first-child");
+  if (titleRow) {
+    renderProviderBadgeLine(titleRow, curatorBadges, "tmdb-item-badges-line");
+  } else if (titleContainer) {
+    renderProviderBadgeLine(titleContainer, curatorBadges, "tmdb-item-badges-line", titleContainer.firstElementChild);
   }
 
   if (!posterUrl && !overview) return;
@@ -499,11 +520,11 @@ function applyPosterBadgesAndOverviewToListItem(itemEl, enriched, cssClassName, 
     detailBox.className = cssClassName;
     detailBox.style.width = "100%";
     detailBox.style.display = "flex";
-    detailBox.style.gap = "14px";
+    detailBox.style.gap = "16px";
     detailBox.style.alignItems = "flex-start";
     detailBox.style.flexWrap = "wrap";
-    detailBox.style.marginTop = "8px";
-    detailBox.style.paddingTop = "8px";
+    detailBox.style.marginTop = "12px";
+    detailBox.style.paddingTop = "12px";
     detailBox.style.borderTop = "1px solid rgba(148, 163, 184, 0.16)";
     itemEl.append(detailBox);
   }
@@ -532,6 +553,7 @@ function applyPosterBadgesAndOverviewToListItem(itemEl, enriched, cssClassName, 
     const summaryEl = document.createElement("div");
     summaryEl.className = "meta";
     summaryEl.style.marginTop = "0";
+    summaryEl.style.lineHeight = "1.55";
     summaryEl.style.color = "#cbd5e1";
     summaryEl.textContent = overview;
     textCol.append(summaryEl);
@@ -539,6 +561,7 @@ function applyPosterBadgesAndOverviewToListItem(itemEl, enriched, cssClassName, 
     const noSummaryEl = document.createElement("div");
     noSummaryEl.className = "meta";
     noSummaryEl.style.marginTop = "0";
+    noSummaryEl.style.lineHeight = "1.55";
     noSummaryEl.textContent = "Keine Inhaltsangabe auf TMDB hinterlegt.";
     textCol.append(noSummaryEl);
   }
