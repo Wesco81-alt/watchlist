@@ -269,6 +269,101 @@ function ensurePosterPreviewControls() {
   }
 }
 
+function applyPosterAndProvidersToCard(card, enriched) {
+  if (!card || !enriched) return;
+
+  const posterPath = enriched?.meta?.posterPath || null;
+  const posterUrl = posterPath ? buildPosterUrl(posterPath, "w185") : null;
+  const flatrate = Array.isArray(enriched?.availabilityDE?.flatrate)
+    ? enriched.availabilityDE.flatrate.map((p) => p.name).filter(Boolean)
+    : [];
+  const free = Array.isArray(enriched?.availabilityDE?.free)
+    ? enriched.availabilityDE.free.map((p) => p.name).filter(Boolean)
+    : [];
+  const providerNames = Array.from(new Set([...flatrate, ...free]));
+
+  let mediaRow = card.querySelector(".tmdb-rec-enrichment");
+  if (!mediaRow && (posterUrl || providerNames.length > 0)) {
+    mediaRow = document.createElement("div");
+    mediaRow.className = "tmdb-rec-enrichment";
+    mediaRow.style.display = "flex";
+    mediaRow.style.gap = "10px";
+    mediaRow.style.alignItems = "flex-start";
+    mediaRow.style.marginTop = "4px";
+
+    const head = card.querySelector(".rec-head");
+    if (head && head.nextSibling) {
+      card.insertBefore(mediaRow, head.nextSibling);
+    } else {
+      card.prepend(mediaRow);
+    }
+  }
+
+  if (!mediaRow) return;
+  mediaRow.innerHTML = "";
+
+  if (posterUrl) {
+    const img = document.createElement("img");
+    img.src = posterUrl;
+    img.alt = "Poster";
+    img.loading = "lazy";
+    img.style.width = "64px";
+    img.style.height = "96px";
+    img.style.objectFit = "cover";
+    img.style.borderRadius = "6px";
+    img.style.flexShrink = "0";
+    mediaRow.append(img);
+  }
+
+  if (providerNames.length > 0) {
+    const info = document.createElement("div");
+    info.className = "meta";
+    info.textContent = "TMDB DE: " + providerNames.slice(0, 5).join(", ");
+    mediaRow.append(info);
+  }
+}
+
+async function enrichRecommendationContainer(container) {
+  const target = container || document.getElementById("aiRecommendations");
+  if (!target || !getStoredTmdbKey()) return;
+
+  const cards = Array.from(target.querySelectorAll(".rec-card"));
+  for (const card of cards) {
+    const titleEl = card.querySelector(".rec-head strong");
+    const title = (titleEl?.textContent || "").trim();
+    if (!title) continue;
+
+    const typePillText = (card.querySelector(".rec-head .type-pill")?.textContent || "").trim();
+    const yearMatch = (card.querySelector(".rec-head")?.textContent || "").match(/\((\d{4})\)/);
+    const year = yearMatch ? Number(yearMatch[1]) : null;
+
+    try {
+      const enriched = await enrichClassicTitle({
+        title,
+        type: typePillText,
+        year
+      });
+      applyPosterAndProvidersToCard(card, enriched);
+    } catch (err) {
+      logInfo(`TMDB-Anreicherung für „${title}“ fehlgeschlagen: ${err?.message || err}`);
+    }
+  }
+}
+
+function hookRecommendationRendering() {
+  if (typeof window.renderRecommendations !== "function" || window.renderRecommendations.__tmdbHooked) {
+    return;
+  }
+  const orig = window.renderRecommendations;
+  const wrapped = function (container, recs) {
+    const out = orig.call(this, container, recs);
+    enrichRecommendationContainer(container);
+    return out;
+  };
+  wrapped.__tmdbHooked = true;
+  window.renderRecommendations = wrapped;
+}
+
 function bindTmdbKeyControls() {
   const input = document.getElementById("tmdbApiKeyInput");
   const saveBtn = document.getElementById("saveTmdbKeyBtn");
@@ -304,6 +399,7 @@ function bindTmdbKeyControls() {
 
   ensurePosterPreviewControls();
   refreshTmdbKeyUi();
+  hookRecommendationRendering();
 }
 
 window.WatchlistTmdbBridge = {
@@ -315,7 +411,9 @@ window.WatchlistTmdbBridge = {
   findTmdbId,
   fetchTitleEnrichment,
   enrichClassicTitle,
-  runPosterLookup
+  runPosterLookup,
+  enrichRecommendationContainer,
+  hookRecommendationRendering
 };
 
 window.WatchlistStoreBridge = {
@@ -331,12 +429,17 @@ window.WatchlistStoreBridge = {
   enrichTitleIfNeeded
 };
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    bindTmdbKeyControls();
-    initStore().catch(() => {});
-  });
-} else {
+function initBridge() {
   bindTmdbKeyControls();
   initStore().catch(() => {});
+  setTimeout(() => {
+    hookRecommendationRendering();
+    enrichRecommendationContainer();
+  }, 150);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initBridge);
+} else {
+  initBridge();
 }
