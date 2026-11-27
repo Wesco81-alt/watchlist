@@ -6,6 +6,32 @@ const SEEN_RATINGS_STORAGE = "watchlist_kurator_seen_ratings_v1";
 const API_KEY_STORAGE = "watchlist_kurator_gemini_key_v1";
 const ACTIVE_PROVIDERS_STORAGE = "watchlist_kurator_active_providers_v1";
 const DEFAULT_SEEN_MIN_SECONDS = 300;
+
+const TMDB_PROVIDER_ID_TO_LABEL = {
+  2100: "Prime Video (mit Werbung)",
+  2412: "MagentaTV+",
+  2750: "RTL+",
+  421: "Joyn+",
+  524: "Discovery+",
+  1899: "HBO Max",
+  2285: "JustWatch TV Free",
+  2785: "JustWatch TV+",
+  188: "YouTube Premium",
+  235: "YouTube Free",
+  613: "Prime Video Free",
+  1902: "ARD Plus",
+  234: "Arte",
+  538: "Plex",
+  300: "Pluto TV",
+  1954: "ServusTV On",
+  1994: "TELE 5",
+  2076: "wedoTV",
+  2081: "KiKA",
+  2103: "funk",
+  2201: "TOGGO",
+  2206: "Kixi"
+};
+
 const PROVIDERS = [
   "Sky",
   "Netflix",
@@ -22,9 +48,51 @@ const PROVIDERS = [
   "HBO Max",
   "Apple TV",
   "Rakuten TV",
+  "Prime Video (mit Werbung)",
+  "MagentaTV+",
+  "RTL+",
+  "Joyn+",
+  "Discovery+",
+  "JustWatch TV Free",
+  "JustWatch TV+",
+  "YouTube Premium",
+  "YouTube Free",
+  "Prime Video Free",
+  "ARD Plus",
+  "Arte",
+  "Plex",
+  "Pluto TV",
+  "ServusTV On",
+  "TELE 5",
+  "wedoTV",
+  "KiKA",
+  "funk",
+  "TOGGO",
+  "Kixi",
   "Sonstiges"
 ];
-const MEDIATHEK_FREE_PROVIDERS = ["ARD", "ZDF", "3 Sat", "Joyn", "Netzkino"];
+
+const MEDIATHEK_FREE_PROVIDERS = [
+  "ARD",
+  "ZDF",
+  "3 Sat",
+  "Joyn",
+  "Netzkino",
+  "JustWatch TV Free",
+  "YouTube Free",
+  "Prime Video Free",
+  "Arte",
+  "Plex",
+  "Pluto TV",
+  "ServusTV On",
+  "TELE 5",
+  "wedoTV",
+  "KiKA",
+  "funk",
+  "TOGGO",
+  "Kixi"
+];
+
 const RATINGS = ["Gefällt mir nicht", "Gefällt mir", "Finde ich super"];
 
 const navButtons = Array.from(document.querySelectorAll(".nav-btn"));
@@ -427,7 +495,33 @@ function stripMarkdown(str) {
 
 function normalizeProvider(raw) {
   if (!raw) return "Sonstiges";
-  const match = PROVIDERS.find((p) => p.toLowerCase() === String(raw).trim().toLowerCase());
+  const clean = String(raw).trim();
+  const byId = TMDB_PROVIDER_ID_TO_LABEL[Number(clean)];
+  if (byId && PROVIDERS.includes(byId)) return byId;
+
+  const lower = clean.toLowerCase();
+  const aliasMap = {
+    "tresat": "3 Sat",
+    "3sat": "3 Sat",
+    "disney plus": "Disney+",
+    "paramount plus": "Paramount+",
+    "amazon prime video": "Prime Video",
+    "ard mediathek": "ARD",
+    "zdf mediathek": "ZDF",
+    "magenta tv+": "MagentaTV+",
+    "joyn plus": "Joyn+",
+    "amazon prime video with ads": "Prime Video (mit Werbung)",
+    "amazon prime video free with ads": "Prime Video Free",
+    "wedo tv": "wedoTV",
+    "funk": "funk",
+    "toggo": "TOGGO"
+  };
+
+  if (aliasMap[lower] && PROVIDERS.includes(aliasMap[lower])) {
+    return aliasMap[lower];
+  }
+
+  const match = PROVIDERS.find((p) => p.toLowerCase() === lower);
   return match || "Sonstiges";
 }
 
@@ -618,7 +712,8 @@ function renderList() {
   const selectedRating = ratingFilter.value;
 
   const filtered = items.filter((item) => {
-    const providerMatch = selectedProvider === "Alle" || item.provider === selectedProvider;
+    const itemProvider = normalizeProvider(item.provider);
+    const providerMatch = selectedProvider === "Alle" || itemProvider === selectedProvider;
     const itemRating = normalizeRatingLabel(item.rating);
     let ratingMatch = true;
     if (selectedRating === "Ohne Bewertung") {
@@ -636,7 +731,7 @@ function renderList() {
   }
 
   filtered.forEach((item) => {
-    const providerName = PROVIDERS.includes(item.provider) ? item.provider : "Sonstiges";
+    const providerName = normalizeProvider(item.provider);
     const currentRating = normalizeRatingLabel(item.rating);
     const typeBadge = item.type
       ? '<span class="type-pill">' + escapeHtml(item.type) + "</span>"
@@ -1087,7 +1182,7 @@ addForm.addEventListener("submit", (e) => {
     id: crypto.randomUUID(),
     title,
     type: chosenType,
-    provider: providerInput.value,
+    provider: normalizeProvider(providerInput.value),
     rating: null
   });
   saveItems();
@@ -1133,7 +1228,8 @@ recommendBtn.addEventListener("click", async () => {
   const titles = items
     .map((i) => {
       const r = normalizeRatingLabel(i.rating);
-      const meta = [i.type, i.provider || "Sonstiges", r ? "Bewertung: " + r : null]
+      const prov = normalizeProvider(i.provider);
+      const meta = [i.type, prov, r ? "Bewertung: " + r : null]
         .filter(Boolean)
         .join(", ");
       return i.title + (meta ? " [" + meta + "]" : "");
@@ -1192,10 +1288,15 @@ if (!Array.isArray(items) || items.length === 0) {
 } else {
   let itemsMigrated = false;
   items = items.map((it) => {
-    const normalized = normalizeRatingLabel(it.rating);
-    if (it.rating && normalized && it.rating !== normalized) {
+    const normalizedRating = normalizeRatingLabel(it.rating);
+    const normalizedProv = normalizeProvider(it.provider);
+    if ((it.rating && normalizedRating && it.rating !== normalizedRating) || (it.provider && it.provider !== normalizedProv)) {
       itemsMigrated = true;
-      return { ...it, rating: normalized };
+      return {
+        ...it,
+        rating: it.rating ? normalizedRating : null,
+        provider: normalizedProv
+      };
     }
     return it;
   });
@@ -1256,7 +1357,7 @@ if (!Array.isArray(enabledProviders)) {
   saveEnabledProviders();
 } else {
   enabledProviders = enabledProviders
-    .map((p) => (p === "Tresat" ? "3 Sat" : p))
+    .map((p) => (p === "Tresat" ? "3 Sat" : normalizeProvider(p)))
     .filter((p, idx, arr) => PROVIDERS.includes(p) && arr.indexOf(p) === idx);
   saveEnabledProviders();
 }
