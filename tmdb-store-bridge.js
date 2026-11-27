@@ -880,38 +880,6 @@ window.WatchlistStoreBridge = {
 };
 
 
-function findProviderListContainer() {
-  const explicitIds = [
-    "providerList",
-    "providersList",
-    "providerToggles",
-    "providersContainer",
-    "providerGrid",
-    "providersGrid"
-  ];
-  for (const id of explicitIds) {
-    const el = document.getElementById(id);
-    if (el) return el;
-  }
-
-  // Fallback: Suche einen Container, der bekannte Anbieter wie "Netflix" oder "Sky" enthält
-  const candidates = Array.from(document.querySelectorAll("section, div, ul"));
-  for (const el of candidates) {
-    if (el.id === "tmdbConfigCard") continue;
-    const text = String(el.textContent || "");
-    if (text.includes("Netflix") && text.includes("Sky") && (text.includes("Aktiv") || text.includes("Aus"))) {
-      // Bevorzuge den innersten passenden Container, der nicht der gesamte Body ist
-      const hasInnerMatch = Array.from(el.children || []).some((child) => {
-        const cText = String(child.textContent || "");
-        return cText.includes("Netflix") && cText.includes("Sky");
-      });
-      if (!hasInnerMatch) return el;
-    }
-  }
-
-  return null;
-}
-
 function renameTresatInDom(rootEl) {
   const scope = rootEl || document.body;
   if (!scope) return;
@@ -926,176 +894,16 @@ function renameTresatInDom(rootEl) {
 }
 
 function syncProviderToggleList() {
-  const fullList = dedupeProviderList(DEFAULT_CURATOR_PROVIDERS);
+  // Entferne eventuell früher erzeugte Bridge-Karten, damit app.js in #providerToggleGrid sauber und ohne Dubletten rendert
+  document.querySelectorAll(".tmdb-synced-provider-card, .tmdb-synced-provider-btn").forEach((el) => el.remove());
 
   if (Array.isArray(window.PROVIDERS)) {
-    const dedupedExisting = dedupeProviderList(window.PROVIDERS);
+    const deduped = dedupeProviderList(window.PROVIDERS);
     window.PROVIDERS.length = 0;
-    dedupedExisting.forEach((item) => window.PROVIDERS.push(item));
-
-    fullList.forEach((provider) => {
-      const exists = window.PROVIDERS.some(
-        (p) => mapAliasOrExact(p).toLowerCase() === provider.toLowerCase()
-      );
-      if (!exists) {
-        const sonstIdx = window.PROVIDERS.findIndex(
-          (p) => mapAliasOrExact(p).toLowerCase() === "sonstiges"
-        );
-        if (sonstIdx >= 0) {
-          window.PROVIDERS.splice(sonstIdx, 0, provider);
-        } else {
-          window.PROVIDERS.push(provider);
-        }
-      }
-    });
-  } else {
-    window.PROVIDERS = [...fullList];
+    deduped.forEach((p) => window.PROVIDERS.push(p));
   }
 
   renameTresatInDom(document.body);
-
-  const toggleableProviders = dedupeProviderList(window.PROVIDERS).filter(
-    (p) => p.toLowerCase() !== "sonstiges"
-  );
-
-  // Zuvor erstellte Bridge-Karten entfernen, um Dubletten zu vermeiden
-  document.querySelectorAll(".tmdb-synced-provider-card").forEach((el) => el.remove());
-
-  const container = findProviderListContainer();
-  if (!container) return;
-
-  // Bestehende Einträge im Container nach normalisiertem Anbieternamen prüfen & echte Dubletten ausblenden
-  const seenCardKeys = new Set();
-  const childItems = Array.from(container.children || []);
-  childItems.forEach((child) => {
-    if (child.classList && child.classList.contains("tmdb-synced-provider-card")) return;
-    const rawLabel = String(
-      child.dataset?.provider ||
-      child.querySelector("strong, span, .provider-name")?.textContent ||
-      child.textContent ||
-      ""
-    )
-      .replace(/Aktiv|Aus/gi, "")
-      .trim();
-    const normKey = mapAliasOrExact(rawLabel).toLowerCase();
-    if (!normKey) return;
-    if (seenCardKeys.has(normKey)) {
-      child.style.display = "none";
-    } else {
-      seenCardKeys.add(normKey);
-    }
-  });
-
-  const missingProviders = toggleableProviders.filter(
-    (p) => !seenCardKeys.has(p.toLowerCase())
-  );
-  if (missingProviders.length === 0) return;
-
-  const activeSet = new Set(getActiveCuratorProviders().map((p) => p.toLowerCase()));
-
-  missingProviders.forEach((providerName) => {
-    const isInitiallyActive = activeSet.has(providerName.toLowerCase());
-
-    const card = document.createElement("div");
-    card.className = "provider-card tmdb-synced-provider-card";
-    card.dataset.provider = providerName;
-    card.setAttribute("role", "button");
-    card.setAttribute("tabindex", "0");
-    card.setAttribute("aria-pressed", String(isInitiallyActive));
-    card.style.display = "flex";
-    card.style.alignItems = "center";
-    card.style.justifyContent = "space-between";
-    card.style.gap = "10px";
-    card.style.padding = "12px 14px";
-    card.style.borderRadius = "10px";
-    card.style.cursor = "pointer";
-    card.style.userSelect = "none";
-    card.style.border = isInitiallyActive
-      ? "1px solid rgba(34, 197, 94, 0.35)"
-      : "1px solid rgba(148, 163, 184, 0.2)";
-    card.style.background = isInitiallyActive
-      ? "rgba(20, 83, 45, 0.32)"
-      : "rgba(15, 23, 42, 0.65)";
-
-    const nameSpan = document.createElement("span");
-    nameSpan.style.fontWeight = "600";
-    nameSpan.textContent = providerName;
-
-    const statusSpan = document.createElement("span");
-    statusSpan.className = "tmdb-provider-status-pill";
-    statusSpan.style.fontSize = "0.78rem";
-    statusSpan.style.fontWeight = "600";
-    statusSpan.style.padding = "2px 8px";
-    statusSpan.style.borderRadius = "999px";
-
-    const applyVisualState = (active) => {
-      card.setAttribute("aria-pressed", String(active));
-      card.classList.toggle("active", active);
-      card.classList.toggle("is-active", active);
-      card.style.border = active
-        ? "1px solid rgba(34, 197, 94, 0.35)"
-        : "1px solid rgba(148, 163, 184, 0.2)";
-      card.style.background = active
-        ? "rgba(20, 83, 45, 0.32)"
-        : "rgba(15, 23, 42, 0.65)";
-
-      if (active) {
-        statusSpan.textContent = "Aktiv";
-        statusSpan.style.color = "#4ade80";
-        statusSpan.style.background = "rgba(34, 197, 94, 0.16)";
-      } else {
-        statusSpan.textContent = "Aus";
-        statusSpan.style.color = "#94a3b8";
-        statusSpan.style.background = "rgba(148, 163, 184, 0.14)";
-      }
-    };
-
-    applyVisualState(isInitiallyActive);
-
-    const toggleAction = (ev) => {
-      if (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-      }
-      const currentActive = new Set(getActiveCuratorProviders().map((p) => p.toLowerCase()));
-      const pKey = providerName.toLowerCase();
-      if (currentActive.has(pKey)) {
-        if (currentActive.size > 1) {
-          currentActive.delete(pKey);
-        }
-      } else {
-        currentActive.add(pKey);
-      }
-
-      const nextList = toggleableProviders.filter((p) => currentActive.has(p.toLowerCase()));
-      window.enabledProviders = nextList;
-      try {
-        localStorage.setItem(ACTIVE_PROVIDERS_STORAGE_KEY, JSON.stringify(nextList));
-      } catch {
-        // Ignorieren
-      }
-
-      const nowActive = nextList.includes(providerName);
-      applyVisualState(nowActive);
-
-      if (typeof window.renderList === "function") window.renderList();
-      if (typeof window.renderSeenList === "function") window.renderSeenList();
-      if (typeof window.renderRecommendations === "function") {
-        enrichRecommendationContainer();
-      }
-      logInfo(`Anbieter „${providerName}“ ${nowActive ? "aktiviert" : "deaktiviert"}.`);
-    };
-
-    card.addEventListener("click", toggleAction);
-    card.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" || ev.key === " ") {
-        toggleAction(ev);
-      }
-    });
-
-    card.append(nameSpan, statusSpan);
-    container.append(card);
-  });
 }
 
 function initBridge() {
