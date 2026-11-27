@@ -32,9 +32,11 @@ jobs:
         run: |
           mkdir -p dist
           cp index.html styles.css app.js dist/
-          if [ -f gemini.js ]; then
-            cp gemini.js dist/
-          fi
+          for f in gemini.js recommendation-rating.js tmdb.js store.js tmdb-store-bridge.js; do
+            if [ -f "$f" ]; then
+              cp "$f" dist/
+            fi
+          done
 
           SHORT_SHA="${GITHUB_SHA::7}"
           STAMP="$(date -u +'%Y-%m-%d %H:%M UTC')"
