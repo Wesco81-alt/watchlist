@@ -132,7 +132,7 @@ function mapTmdbProviderNameToCurator(rawName) {
   return directMatch || null;
 }
 
-function getMatchedCuratorProviderBadges(enriched) {
+function getMatchedCuratorProviderBadges(enriched, excludeProviders = []) {
   const buckets = [
     ...(Array.isArray(enriched?.availabilityDE?.flatrate) ? enriched.availabilityDE.flatrate : []),
     ...(Array.isArray(enriched?.availabilityDE?.free) ? enriched.availabilityDE.free : []),
@@ -142,11 +142,16 @@ function getMatchedCuratorProviderBadges(enriched) {
   ];
 
   const activeProviders = new Set(getActiveCuratorProviders());
+  const excluded = new Set(
+    (Array.isArray(excludeProviders) ? excludeProviders : [])
+      .map((p) => mapTmdbProviderNameToCurator(p) || String(p || "").trim())
+      .filter(Boolean)
+  );
   const matched = [];
 
   for (const entry of buckets) {
     const mapped = mapTmdbProviderNameToCurator(entry?.name || "");
-    if (mapped && activeProviders.has(mapped) && !matched.includes(mapped)) {
+    if (mapped && activeProviders.has(mapped) && !excluded.has(mapped) && !matched.includes(mapped)) {
       matched.push(mapped);
     }
   }
@@ -176,6 +181,7 @@ function renderProviderBadgeLine(parentEl, badges, lineClass = "tmdb-provider-ba
   line.style.flexWrap = "wrap";
   line.style.alignItems = "center";
   line.style.width = "100%";
+  line.style.flexBasis = "100%";
   line.style.marginTop = "10px";
   line.style.marginBottom = "4px";
 
@@ -496,77 +502,115 @@ async function enrichRecommendationContainer(container) {
   }
 }
 
-function applyPosterBadgesAndOverviewToListItem(itemEl, enriched, cssClassName, includeProviderBadges = true) {
+function moveWatchlistActionsBelowOverview(itemEl) {
+  if (!itemEl) return;
+  const actionsEl = itemEl.querySelector(":scope > .actions");
+  if (!actionsEl) return;
+
+  actionsEl.style.width = "100%";
+  actionsEl.style.flexBasis = "100%";
+  actionsEl.style.justifyContent = "flex-start";
+  actionsEl.style.marginTop = "12px";
+  actionsEl.style.paddingTop = "10px";
+  actionsEl.style.borderTop = "1px solid rgba(148, 163, 184, 0.14)";
+
+  // Ganz ans Ende des .item-Containers (unter die Inhaltsbeschreibung) verschieben
+  itemEl.append(actionsEl);
+}
+
+function applyPosterBadgesAndOverviewToListItem(
+  itemEl,
+  enriched,
+  cssClassName,
+  includeProviderBadges = true,
+  moveActionsToBottom = false
+) {
   if (!itemEl || !enriched) return;
 
   const posterPath = enriched?.meta?.posterPath || null;
   const posterUrl = posterPath ? buildPosterUrl(posterPath, "w500") : null;
   const overview = String(enriched?.meta?.overview || "").trim();
-  const curatorBadges = includeProviderBadges ? getMatchedCuratorProviderBadges(enriched) : [];
+  const existingItemProviders = Array.from(
+    itemEl.querySelectorAll(".provider-pill:not(.tmdb-curator-badge)")
+  ).map((el) => (el.textContent || "").trim());
+  const curatorBadges = includeProviderBadges
+    ? getMatchedCuratorProviderBadges(enriched, existingItemProviders)
+    : [];
 
-  const titleRow = itemEl.querySelector(":scope > div:first-child > div:first-child");
-  const titleContainer = itemEl.querySelector(":scope > div:first-child");
+  const infoContainer = itemEl.querySelector(":scope > div:first-child");
+  const titleRow = infoContainer ? infoContainer.querySelector(":scope > div:first-child") : null;
+
+  if (infoContainer) {
+    infoContainer.style.flex = "1 1 100%";
+    infoContainer.style.minWidth = "0";
+  }
+
   if (titleRow) {
     renderProviderBadgeLine(titleRow, curatorBadges, "tmdb-item-badges-line");
-  } else if (titleContainer) {
-    renderProviderBadgeLine(titleContainer, curatorBadges, "tmdb-item-badges-line", titleContainer.firstElementChild);
+  } else if (infoContainer) {
+    renderProviderBadgeLine(infoContainer, curatorBadges, "tmdb-item-badges-line", infoContainer.firstElementChild);
   }
 
-  if (!posterUrl && !overview) return;
+  if (posterUrl || overview) {
+    let detailBox = itemEl.querySelector("." + cssClassName);
+    if (!detailBox) {
+      detailBox = document.createElement("div");
+      detailBox.className = cssClassName;
+      detailBox.style.width = "100%";
+      detailBox.style.flexBasis = "100%";
+      detailBox.style.display = "flex";
+      detailBox.style.gap = "16px";
+      detailBox.style.alignItems = "flex-start";
+      detailBox.style.flexWrap = "wrap";
+      detailBox.style.marginTop = "12px";
+      detailBox.style.paddingTop = "12px";
+      detailBox.style.borderTop = "1px solid rgba(148, 163, 184, 0.16)";
+      itemEl.append(detailBox);
+    }
 
-  let detailBox = itemEl.querySelector("." + cssClassName);
-  if (!detailBox) {
-    detailBox = document.createElement("div");
-    detailBox.className = cssClassName;
-    detailBox.style.width = "100%";
-    detailBox.style.display = "flex";
-    detailBox.style.gap = "16px";
-    detailBox.style.alignItems = "flex-start";
-    detailBox.style.flexWrap = "wrap";
-    detailBox.style.marginTop = "12px";
-    detailBox.style.paddingTop = "12px";
-    detailBox.style.borderTop = "1px solid rgba(148, 163, 184, 0.16)";
-    itemEl.append(detailBox);
+    detailBox.innerHTML = "";
+
+    if (posterUrl) {
+      const img = document.createElement("img");
+      img.src = posterUrl;
+      img.alt = "Poster zu " + (enriched?.core?.title || "Titel");
+      img.loading = "lazy";
+      img.style.width = "156px";
+      img.style.maxWidth = "100%";
+      img.style.height = "auto";
+      img.style.aspectRatio = "2 / 3";
+      img.style.objectFit = "cover";
+      img.style.borderRadius = "8px";
+      img.style.flexShrink = "0";
+      detailBox.append(img);
+    }
+
+    const textCol = document.createElement("div");
+    textCol.style.flex = "1 1 200px";
+
+    if (overview) {
+      const summaryEl = document.createElement("div");
+      summaryEl.className = "meta";
+      summaryEl.style.marginTop = "0";
+      summaryEl.style.lineHeight = "1.55";
+      summaryEl.style.color = "#cbd5e1";
+      summaryEl.textContent = overview;
+      textCol.append(summaryEl);
+    } else {
+      const noSummaryEl = document.createElement("div");
+      noSummaryEl.className = "meta";
+      noSummaryEl.style.marginTop = "0";
+      noSummaryEl.style.lineHeight = "1.55";
+      noSummaryEl.textContent = "Keine Inhaltsangabe auf TMDB hinterlegt.";
+      textCol.append(noSummaryEl);
+    }
+
+    detailBox.append(textCol);
   }
 
-  detailBox.innerHTML = "";
-
-  if (posterUrl) {
-    const img = document.createElement("img");
-    img.src = posterUrl;
-    img.alt = "Poster zu " + (enriched?.core?.title || "Titel");
-    img.loading = "lazy";
-    img.style.width = "156px";
-    img.style.maxWidth = "100%";
-    img.style.height = "auto";
-    img.style.aspectRatio = "2 / 3";
-    img.style.objectFit = "cover";
-    img.style.borderRadius = "8px";
-    img.style.flexShrink = "0";
-    detailBox.append(img);
+  if (moveActionsToBottom) {
+    moveWatchlistActionsBelowOverview(itemEl);
   }
-
-  const textCol = document.createElement("div");
-  textCol.style.flex = "1 1 200px";
-
-  if (overview) {
-    const summaryEl = document.createElement("div");
-    summaryEl.className = "meta";
-    summaryEl.style.marginTop = "0";
-    summaryEl.style.lineHeight = "1.55";
-    summaryEl.style.color = "#cbd5e1";
-    summaryEl.textContent = overview;
-    textCol.append(summaryEl);
-  } else {
-    const noSummaryEl = document.createElement("div");
-    noSummaryEl.className = "meta";
-    noSummaryEl.style.marginTop = "0";
-    noSummaryEl.style.lineHeight = "1.55";
-    noSummaryEl.textContent = "Keine Inhaltsangabe auf TMDB hinterlegt.";
-    textCol.append(noSummaryEl);
-  }
-
-  detailBox.append(textCol);
 }
 
 async function enrichWatchlistContainer(container) {
@@ -589,9 +633,10 @@ async function enrichWatchlistContainer(container) {
         type: typePillText,
         year
       });
-      applyPosterBadgesAndOverviewToListItem(itemEl, enriched, "tmdb-watchlist-details", true);
+      applyPosterBadgesAndOverviewToListItem(itemEl, enriched, "tmdb-watchlist-details", true, true);
     } catch (err) {
       logInfo(`TMDB-Merklisten-Anreicherung für „${title}“ fehlgeschlagen: ${err?.message || err}`);
+      moveWatchlistActionsBelowOverview(itemEl);
     }
   }
 }
@@ -616,7 +661,7 @@ async function enrichSeenContainer(container) {
         type: typePillText,
         year
       });
-      applyPosterBadgesAndOverviewToListItem(itemEl, enriched, "tmdb-seen-details", true);
+      applyPosterBadgesAndOverviewToListItem(itemEl, enriched, "tmdb-seen-details", true, false);
     } catch (err) {
       logInfo(`TMDB-Gesehen-Anreicherung für „${title}“ fehlgeschlagen: ${err?.message || err}`);
     }
