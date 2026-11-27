@@ -877,9 +877,9 @@ function syncProviderToggleList() {
     dedupedExisting.forEach((item) => window.PROVIDERS.push(item));
 
     fullList.forEach((provider) => {
-      const exists = window.PROVIDERS.some((p) => normalizeProviderLabel(p).toLowerCase() === provider.toLowerCase());
+      const exists = window.PROVIDERS.some((p) => mapAliasOrExact(p).toLowerCase() === provider.toLowerCase());
       if (!exists) {
-        const sonstIdx = window.PROVIDERS.findIndex((p) => normalizeProviderLabel(p).toLowerCase() === "sonstiges");
+        const sonstIdx = window.PROVIDERS.findIndex((p) => mapAliasOrExact(p).toLowerCase() === "sonstiges");
         if (sonstIdx >= 0) {
           window.PROVIDERS.splice(sonstIdx, 0, provider);
         } else {
@@ -895,7 +895,15 @@ function syncProviderToggleList() {
     (p) => p.toLowerCase() !== "sonstiges"
   );
 
-  // Vorhandene eigene .tmdb-synced-provider-btn entfernen, falls app.js inzwischen neu gerendert hat
+  if (typeof window.renderProviders === "function" && !window.__tmdbRenderingProviders) {
+    try {
+      window.__tmdbRenderingProviders = true;
+      window.renderProviders();
+    } finally {
+      window.__tmdbRenderingProviders = false;
+    }
+  }
+
   document.querySelectorAll(".tmdb-synced-provider-btn").forEach((btn) => btn.remove());
 
   const existingNodes = Array.from(
@@ -903,7 +911,7 @@ function syncProviderToggleList() {
   );
   const renderedKeys = new Set(
     existingNodes
-      .map((el) => normalizeProviderLabel(el.dataset.provider || el.textContent || "").toLowerCase())
+      .map((el) => mapAliasOrExact(el.dataset.provider || el.textContent || "").toLowerCase())
       .filter(Boolean)
   );
 
