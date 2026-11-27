@@ -95,18 +95,54 @@ function logInfo(msg) {
   }
 }
 
-function getCuratorProviders() {
-  if (Array.isArray(window.PROVIDERS) && window.PROVIDERS.length > 0) {
-    return window.PROVIDERS.filter((p) => p && p !== "Sonstiges");
+function normalizeProviderLabel(rawName) {
+  const clean = String(rawName || "").trim();
+  if (!clean) return "";
+  return mapTmdbProviderNameToCurator(clean) || clean;
+}
+
+function dedupeProviderList(list) {
+  const result = [];
+  const seen = new Set();
+  for (const item of Array.isArray(list) ? list : []) {
+    const label = normalizeProviderLabel(item);
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(label);
+    }
   }
-  return DEFAULT_CURATOR_PROVIDERS.filter((p) => p !== "Sonstiges");
+  return result;
+}
+
+function getCuratorProviders() {
+  const source = Array.isArray(window.PROVIDERS) && window.PROVIDERS.length > 0
+    ? window.PROVIDERS
+    : DEFAULT_CURATOR_PROVIDERS;
+  return dedupeProviderList(source).filter((p) => p.toLowerCase() !== "sonstiges");
 }
 
 function getActiveCuratorProviders() {
-  const allowed = new Set(getCuratorProviders());
+  const allowed = getCuratorProviders();
+  const allowedMap = new Map(allowed.map((p) => [p.toLowerCase(), p]));
+
+  const pickFromArray = (arr) => {
+    const picked = [];
+    const seen = new Set();
+    for (const raw of Array.isArray(arr) ? arr : []) {
+      const norm = normalizeProviderLabel(raw);
+      const canonical = allowedMap.get(norm.toLowerCase());
+      if (canonical && !seen.has(canonical.toLowerCase())) {
+        seen.add(canonical.toLowerCase());
+        picked.push(canonical);
+      }
+    }
+    return picked;
+  };
 
   if (Array.isArray(window.enabledProviders)) {
-    const active = window.enabledProviders.filter((p) => allowed.has(p));
+    const active = pickFromArray(window.enabledProviders);
     if (active.length > 0) return active;
   }
 
@@ -115,7 +151,7 @@ function getActiveCuratorProviders() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const active = parsed.filter((p) => allowed.has(p));
+        const active = pickFromArray(parsed);
         if (active.length > 0) return active;
       }
     }
@@ -123,7 +159,7 @@ function getActiveCuratorProviders() {
     // Ignorieren
   }
 
-  return getCuratorProviders();
+  return allowed;
 }
 
 function mapTmdbProviderNameToCurator(rawName) {
@@ -833,12 +869,17 @@ window.WatchlistStoreBridge = {
 
 
 function syncProviderToggleList() {
-  const fullList = DEFAULT_CURATOR_PROVIDERS.filter((p) => Boolean(p));
+  const fullList = dedupeProviderList(DEFAULT_CURATOR_PROVIDERS);
 
   if (Array.isArray(window.PROVIDERS)) {
+    const dedupedExisting = dedupeProviderList(window.PROVIDERS);
+    window.PROVIDERS.length = 0;
+    dedupedExisting.forEach((item) => window.PROVIDERS.push(item));
+
     fullList.forEach((provider) => {
-      if (!window.PROVIDERS.includes(provider)) {
-        const sonstIdx = window.PROVIDERS.indexOf("Sonstiges");
+      const exists = window.PROVIDERS.some((p) => normalizeProviderLabel(p).toLowerCase() === provider.toLowerCase());
+      if (!exists) {
+        const sonstIdx = window.PROVIDERS.findIndex((p) => normalizeProviderLabel(p).toLowerCase() === "sonstiges");
         if (sonstIdx >= 0) {
           window.PROVIDERS.splice(sonstIdx, 0, provider);
         } else {
@@ -850,17 +891,23 @@ function syncProviderToggleList() {
     window.PROVIDERS = [...fullList];
   }
 
-  const toggleableProviders = window.PROVIDERS.filter((p) => p && p !== "Sonstiges");
+  const toggleableProviders = dedupeProviderList(window.PROVIDERS).filter(
+    (p) => p.toLowerCase() !== "sonstiges"
+  );
+
+  // Vorhandene eigene .tmdb-synced-provider-btn entfernen, falls app.js inzwischen neu gerendert hat
+  document.querySelectorAll(".tmdb-synced-provider-btn").forEach((btn) => btn.remove());
+
   const existingNodes = Array.from(
     document.querySelectorAll("[data-provider], .provider-toggle, .provider-chip, .provider-btn")
   );
-  const renderedNames = new Set(
+  const renderedKeys = new Set(
     existingNodes
-      .map((el) => String(el.dataset.provider || el.textContent || "").trim())
+      .map((el) => normalizeProviderLabel(el.dataset.provider || el.textContent || "").toLowerCase())
       .filter(Boolean)
   );
 
-  const missingProviders = toggleableProviders.filter((p) => !renderedNames.has(p));
+  const missingProviders = toggleableProviders.filter((p) => !renderedKeys.has(p.toLowerCase()));
   if (missingProviders.length === 0) return;
 
   const container =
@@ -871,7 +918,7 @@ function syncProviderToggleList() {
 
   if (!container) return;
 
-  const activeSet = new Set(getActiveCuratorProviders());
+  const activeSet = new Set(getActiveCuratorProviders().map((p) => p.toLowerCase()));
 
   missingProviders.forEach((providerName) => {
     const btn = document.createElement("button");
@@ -880,23 +927,24 @@ function syncProviderToggleList() {
     btn.dataset.provider = providerName;
     btn.textContent = providerName;
 
-    const isActive = activeSet.has(providerName);
+    const isActive = activeSet.has(providerName.toLowerCase());
     btn.setAttribute("aria-pressed", String(isActive));
     if (isActive) {
       btn.classList.add("active", "is-active", "selected");
     }
 
     btn.addEventListener("click", () => {
-      const currentActive = new Set(getActiveCuratorProviders());
-      if (currentActive.has(providerName)) {
+      const currentActive = new Set(getActiveCuratorProviders().map((p) => p.toLowerCase()));
+      const pKey = providerName.toLowerCase();
+      if (currentActive.has(pKey)) {
         if (currentActive.size > 1) {
-          currentActive.delete(providerName);
+          currentActive.delete(pKey);
         }
       } else {
-        currentActive.add(providerName);
+        currentActive.add(pKey);
       }
 
-      const nextList = toggleableProviders.filter((p) => currentActive.has(p));
+      const nextList = toggleableProviders.filter((p) => currentActive.has(p.toLowerCase()));
       window.enabledProviders = nextList;
       try {
         localStorage.setItem(ACTIVE_PROVIDERS_STORAGE_KEY, JSON.stringify(nextList));
