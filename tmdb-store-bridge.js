@@ -94,7 +94,7 @@ function renderPosterPreview(enriched, fallbackTitle = "") {
   if (!box) return;
 
   const posterPath = enriched?.meta?.posterPath || null;
-  const posterUrl = posterPath ? buildPosterUrl(posterPath, "w342") : null;
+  const posterUrl = posterPath ? buildPosterUrl(posterPath, "w780") : null;
   const titleText = enriched?.core?.title || fallbackTitle || "Titel";
   const yearText = enriched?.core?.year ? ` (${enriched.core.year})` : "";
   const ratingText = typeof enriched?.meta?.voteAverage === "number"
@@ -108,10 +108,11 @@ function renderPosterPreview(enriched, fallbackTitle = "") {
 
   const wrapper = document.createElement("div");
   wrapper.style.display = "flex";
-  wrapper.style.gap = "12px";
+  wrapper.style.gap = "16px";
   wrapper.style.alignItems = "flex-start";
+  wrapper.style.flexWrap = "wrap";
   wrapper.style.marginTop = "12px";
-  wrapper.style.padding = "10px";
+  wrapper.style.padding = "12px";
   wrapper.style.borderRadius = "10px";
   wrapper.style.background = "rgba(15, 23, 42, 0.55)";
   wrapper.style.border = "1px solid rgba(148, 163, 184, 0.2)";
@@ -121,8 +122,10 @@ function renderPosterPreview(enriched, fallbackTitle = "") {
     img.src = posterUrl;
     img.alt = "Poster zu " + titleText;
     img.loading = "lazy";
-    img.style.width = "92px";
-    img.style.height = "138px";
+    img.style.width = "220px";
+    img.style.maxWidth = "100%";
+    img.style.height = "auto";
+    img.style.aspectRatio = "2 / 3";
     img.style.objectFit = "cover";
     img.style.borderRadius = "8px";
     img.style.flexShrink = "0";
@@ -130,22 +133,23 @@ function renderPosterPreview(enriched, fallbackTitle = "") {
   } else {
     const placeholder = document.createElement("div");
     placeholder.className = "meta";
-    placeholder.style.width = "92px";
-    placeholder.style.height = "138px";
+    placeholder.style.width = "220px";
+    placeholder.style.maxWidth = "100%";
+    placeholder.style.height = "330px";
     placeholder.style.display = "flex";
     placeholder.style.alignItems = "center";
     placeholder.style.justifyContent = "center";
     placeholder.style.textAlign = "center";
     placeholder.style.border = "1px dashed rgba(148, 163, 184, 0.35)";
     placeholder.style.borderRadius = "8px";
-    placeholder.style.padding = "6px";
+    placeholder.style.padding = "8px";
     placeholder.style.flexShrink = "0";
     placeholder.textContent = "Kein Poster gefunden";
     wrapper.append(placeholder);
   }
 
   const info = document.createElement("div");
-  info.style.flex = "1";
+  info.style.flex = "1 1 220px";
 
   const heading = document.createElement("div");
   heading.style.fontWeight = "700";
@@ -269,27 +273,32 @@ function ensurePosterPreviewControls() {
   }
 }
 
-function applyPosterAndProvidersToCard(card, enriched) {
-  if (!card || !enriched) return;
-
-  const posterPath = enriched?.meta?.posterPath || null;
-  const posterUrl = posterPath ? buildPosterUrl(posterPath, "w185") : null;
+function getProviderNamesFromEnriched(enriched) {
   const flatrate = Array.isArray(enriched?.availabilityDE?.flatrate)
     ? enriched.availabilityDE.flatrate.map((p) => p.name).filter(Boolean)
     : [];
   const free = Array.isArray(enriched?.availabilityDE?.free)
     ? enriched.availabilityDE.free.map((p) => p.name).filter(Boolean)
     : [];
-  const providerNames = Array.from(new Set([...flatrate, ...free]));
+  return Array.from(new Set([...flatrate, ...free]));
+}
+
+function applyPosterAndProvidersToCard(card, enriched) {
+  if (!card || !enriched) return;
+
+  const posterPath = enriched?.meta?.posterPath || null;
+  const posterUrl = posterPath ? buildPosterUrl(posterPath, "w500") : null;
+  const providerNames = getProviderNamesFromEnriched(enriched);
 
   let mediaRow = card.querySelector(".tmdb-rec-enrichment");
   if (!mediaRow && (posterUrl || providerNames.length > 0)) {
     mediaRow = document.createElement("div");
     mediaRow.className = "tmdb-rec-enrichment";
     mediaRow.style.display = "flex";
-    mediaRow.style.gap = "10px";
+    mediaRow.style.gap = "14px";
     mediaRow.style.alignItems = "flex-start";
-    mediaRow.style.marginTop = "4px";
+    mediaRow.style.flexWrap = "wrap";
+    mediaRow.style.marginTop = "6px";
 
     const head = card.querySelector(".rec-head");
     if (head && head.nextSibling) {
@@ -307,10 +316,12 @@ function applyPosterAndProvidersToCard(card, enriched) {
     img.src = posterUrl;
     img.alt = "Poster";
     img.loading = "lazy";
-    img.style.width = "64px";
-    img.style.height = "96px";
+    img.style.width = "160px";
+    img.style.maxWidth = "100%";
+    img.style.height = "auto";
+    img.style.aspectRatio = "2 / 3";
     img.style.objectFit = "cover";
-    img.style.borderRadius = "6px";
+    img.style.borderRadius = "8px";
     img.style.flexShrink = "0";
     mediaRow.append(img);
   }
@@ -318,7 +329,8 @@ function applyPosterAndProvidersToCard(card, enriched) {
   if (providerNames.length > 0) {
     const info = document.createElement("div");
     info.className = "meta";
-    info.textContent = "TMDB DE: " + providerNames.slice(0, 5).join(", ");
+    info.style.flex = "1 1 200px";
+    info.textContent = "TMDB DE: " + providerNames.slice(0, 6).join(", ");
     mediaRow.append(info);
   }
 }
@@ -350,18 +362,126 @@ async function enrichRecommendationContainer(container) {
   }
 }
 
-function hookRecommendationRendering() {
-  if (typeof window.renderRecommendations !== "function" || window.renderRecommendations.__tmdbHooked) {
-    return;
+function applyPosterAndOverviewToWatchlistItem(itemEl, enriched) {
+  if (!itemEl || !enriched) return;
+
+  const posterPath = enriched?.meta?.posterPath || null;
+  const posterUrl = posterPath ? buildPosterUrl(posterPath, "w500") : null;
+  const overview = String(enriched?.meta?.overview || "").trim();
+  const providerNames = getProviderNamesFromEnriched(enriched);
+
+  if (!posterUrl && !overview && providerNames.length === 0) return;
+
+  let detailBox = itemEl.querySelector(".tmdb-watchlist-details");
+  if (!detailBox) {
+    detailBox = document.createElement("div");
+    detailBox.className = "tmdb-watchlist-details";
+    detailBox.style.width = "100%";
+    detailBox.style.display = "flex";
+    detailBox.style.gap = "14px";
+    detailBox.style.alignItems = "flex-start";
+    detailBox.style.flexWrap = "wrap";
+    detailBox.style.marginTop = "8px";
+    detailBox.style.paddingTop = "8px";
+    detailBox.style.borderTop = "1px solid rgba(148, 163, 184, 0.16)";
+    itemEl.append(detailBox);
   }
-  const orig = window.renderRecommendations;
-  const wrapped = function (container, recs) {
-    const out = orig.call(this, container, recs);
-    enrichRecommendationContainer(container);
-    return out;
-  };
-  wrapped.__tmdbHooked = true;
-  window.renderRecommendations = wrapped;
+
+  detailBox.innerHTML = "";
+
+  if (posterUrl) {
+    const img = document.createElement("img");
+    img.src = posterUrl;
+    img.alt = "Poster zu " + (enriched?.core?.title || "Titel");
+    img.loading = "lazy";
+    img.style.width = "148px";
+    img.style.maxWidth = "100%";
+    img.style.height = "auto";
+    img.style.aspectRatio = "2 / 3";
+    img.style.objectFit = "cover";
+    img.style.borderRadius = "8px";
+    img.style.flexShrink = "0";
+    detailBox.append(img);
+  }
+
+  const textCol = document.createElement("div");
+  textCol.style.flex = "1 1 200px";
+
+  if (providerNames.length > 0) {
+    const provEl = document.createElement("div");
+    provEl.className = "meta";
+    provEl.style.marginTop = "0";
+    provEl.textContent = "TMDB DE: " + providerNames.slice(0, 6).join(", ");
+    textCol.append(provEl);
+  }
+
+  if (overview) {
+    const summaryEl = document.createElement("div");
+    summaryEl.className = "meta tmdb-watchlist-overview";
+    summaryEl.style.marginTop = providerNames.length > 0 ? "6px" : "0";
+    summaryEl.style.color = "#cbd5e1";
+    summaryEl.textContent = overview;
+    textCol.append(summaryEl);
+  } else {
+    const noSummaryEl = document.createElement("div");
+    noSummaryEl.className = "meta";
+    noSummaryEl.style.marginTop = providerNames.length > 0 ? "6px" : "0";
+    noSummaryEl.textContent = "Keine Inhaltsangabe auf TMDB hinterlegt.";
+    textCol.append(noSummaryEl);
+  }
+
+  detailBox.append(textCol);
+}
+
+async function enrichWatchlistContainer(container) {
+  const target = container || document.getElementById("watchlistContainer");
+  if (!target || !getStoredTmdbKey()) return;
+
+  const itemEls = Array.from(target.querySelectorAll(".item"));
+  for (const itemEl of itemEls) {
+    const titleEl = itemEl.querySelector("strong");
+    const title = (titleEl?.textContent || "").trim();
+    if (!title) continue;
+
+    const typePillText = (itemEl.querySelector(".type-pill")?.textContent || "").trim();
+    const yearMatch = (itemEl.textContent || "").match(/\((\d{4})\)/);
+    const year = yearMatch ? Number(yearMatch[1]) : null;
+
+    try {
+      const enriched = await enrichClassicTitle({
+        title,
+        type: typePillText,
+        year
+      });
+      applyPosterAndOverviewToWatchlistItem(itemEl, enriched);
+    } catch (err) {
+      logInfo(`TMDB-Merklisten-Anreicherung für „${title}“ fehlgeschlagen: ${err?.message || err}`);
+    }
+  }
+}
+
+function hookRecommendationRendering() {
+  if (typeof window.renderRecommendations === "function" && !window.renderRecommendations.__tmdbHooked) {
+    const orig = window.renderRecommendations;
+    const wrapped = function (container, recs) {
+      const out = orig.call(this, container, recs);
+      enrichRecommendationContainer(container);
+      return out;
+    };
+    wrapped.__tmdbHooked = true;
+    window.renderRecommendations = wrapped;
+  }
+
+  if (typeof window.renderList === "function" && !window.renderList.__tmdbWatchlistHooked) {
+    const origList = window.renderList;
+    const wrappedList = function (...args) {
+      const out = origList.apply(this, args);
+      enrichWatchlistContainer(document.getElementById("watchlistContainer"));
+      return out;
+    };
+    wrappedList.__tmdbWatchlistHooked = true;
+    window.renderList = wrappedList;
+  }
 }
 
 function bindTmdbKeyControls() {
@@ -413,6 +533,7 @@ window.WatchlistTmdbBridge = {
   enrichClassicTitle,
   runPosterLookup,
   enrichRecommendationContainer,
+  enrichWatchlistContainer,
   hookRecommendationRendering
 };
 
@@ -435,6 +556,7 @@ function initBridge() {
   setTimeout(() => {
     hookRecommendationRendering();
     enrichRecommendationContainer();
+    enrichWatchlistContainer();
   }, 150);
 }
 
