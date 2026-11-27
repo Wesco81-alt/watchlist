@@ -18,10 +18,14 @@ const ACTIVE_PROVIDERS_STORAGE_KEY = "watchlist_kurator_active_providers_v1";
 const DEFAULT_CURATOR_PROVIDERS = [
   "Sky",
   "Netflix",
+  "YouTube",
   "ARD",
   "ZDF",
-  "Tresat",
+  "3 Sat",
   "Joyn",
+  "Disney+",
+  "Paramount+",
+  "MagentaTV",
   "Netzkino",
   "Prime Video",
   "HBO Max",
@@ -33,6 +37,9 @@ const DEFAULT_CURATOR_PROVIDERS = [
 const TMDB_TO_CURATOR_PROVIDER_MAP = {
   "netflix": "Netflix",
   "netflix standard with ads": "Netflix",
+  "youtube": "YouTube",
+  "youtube movies": "YouTube",
+  "youtube tv": "YouTube",
   "sky go": "Sky",
   "sky show": "Sky",
   "wow": "Sky",
@@ -40,10 +47,16 @@ const TMDB_TO_CURATOR_PROVIDER_MAP = {
   "das erste": "ARD",
   "zdf": "ZDF",
   "zdf mediathek": "ZDF",
-  "3sat": "Tresat",
-  "tresat": "Tresat",
+  "3sat": "3 Sat",
+  "tresat": "3 Sat",
   "joyn": "Joyn",
   "joyn plus+": "Joyn",
+  "disney plus": "Disney+",
+  "disney+": "Disney+",
+  "paramount plus": "Paramount+",
+  "paramount+": "Paramount+",
+  "magentatv": "MagentaTV",
+  "magenta tv": "MagentaTV",
   "netzkino": "Netzkino",
   "amazon prime video": "Prime Video",
   "prime video": "Prime Video",
@@ -159,12 +172,62 @@ function getMatchedCuratorProviderBadges(enriched, excludeProviders = []) {
   return matched;
 }
 
+function styleCompactProviderBadge(badge) {
+  if (!badge) return;
+  badge.style.display = "inline-flex";
+  badge.style.alignItems = "center";
+  badge.style.marginLeft = "0";
+  badge.style.padding = "2px 6px";
+  badge.style.fontSize = "0.7rem";
+  badge.style.lineHeight = "1.25";
+  badge.style.whiteSpace = "nowrap";
+}
+
 function createCuratorProviderBadge(providerName) {
   const badge = document.createElement("span");
   badge.className = "provider-pill tmdb-curator-badge";
   badge.textContent = providerName;
   badge.title = "Verfügbar über Kurator-Anbieter: " + providerName;
+  styleCompactProviderBadge(badge);
   return badge;
+}
+
+function collectAndMoveInlineProviderBadges(scopeEl, extraBadges = [], enforceActiveProviders = false) {
+  const ordered = [];
+  const seen = new Set();
+  const activeSet = new Set(getActiveCuratorProviders().map((p) => String(p).toLowerCase()));
+
+  const addBadgeName = (rawName, requireActive = false) => {
+    const clean = String(rawName || "").trim();
+    if (!clean) return;
+    const mapped = mapTmdbProviderNameToCurator(clean) || clean;
+    if (mapped.toLowerCase() === "sonstiges" && requireActive && !activeSet.has("sonstiges")) {
+      return;
+    }
+    if (requireActive && !activeSet.has(mapped.toLowerCase())) {
+      return;
+    }
+    const key = mapped.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      ordered.push(mapped);
+    }
+  };
+
+  if (scopeEl) {
+    const existingPills = Array.from(scopeEl.querySelectorAll(".provider-pill"));
+    existingPills.forEach((pill) => {
+      if (pill.closest(".tmdb-provider-badges-line")) return;
+      addBadgeName(pill.textContent, enforceActiveProviders);
+      pill.remove();
+    });
+  }
+
+  if (Array.isArray(extraBadges)) {
+    extraBadges.forEach((b) => addBadgeName(b, enforceActiveProviders));
+  }
+
+  return ordered;
 }
 
 function renderProviderBadgeLine(parentEl, badges, lineClass = "tmdb-provider-badges-line", insertAfterEl = null) {
@@ -177,12 +240,12 @@ function renderProviderBadgeLine(parentEl, badges, lineClass = "tmdb-provider-ba
   const line = document.createElement("div");
   line.className = lineClass;
   line.style.display = "flex";
-  line.style.gap = "8px";
+  line.style.gap = "5px";
   line.style.flexWrap = "wrap";
   line.style.alignItems = "center";
   line.style.width = "100%";
   line.style.flexBasis = "100%";
-  line.style.marginTop = "10px";
+  line.style.marginTop = "8px";
   line.style.marginBottom = "4px";
 
   badges.forEach((providerName) => {
@@ -425,14 +488,14 @@ function applyPosterAndBadgesToRecCard(card, enriched) {
 
   const posterPath = enriched?.meta?.posterPath || null;
   const posterUrl = posterPath ? buildPosterUrl(posterPath, "w500") : null;
-  const curatorBadges = getMatchedCuratorProviderBadges(enriched);
-
   const head = card.querySelector(".rec-head");
   const headTitleContainer = card.querySelector(".rec-head > div:first-child");
-  if (headTitleContainer) {
-    renderProviderBadgeLine(headTitleContainer, curatorBadges, "tmdb-rec-badges-line");
-  } else if (head) {
-    renderProviderBadgeLine(head, curatorBadges, "tmdb-rec-badges-line");
+  const targetParent = headTitleContainer || head;
+  const tmdbBadges = getMatchedCuratorProviderBadges(enriched);
+  const allBadges = collectAndMoveInlineProviderBadges(head || card, tmdbBadges);
+
+  if (targetParent) {
+    renderProviderBadgeLine(targetParent, allBadges, "tmdb-rec-badges-line");
   }
 
   let posterRow = card.querySelector(".tmdb-rec-poster-row");
@@ -530,11 +593,9 @@ function applyPosterBadgesAndOverviewToListItem(
   const posterPath = enriched?.meta?.posterPath || null;
   const posterUrl = posterPath ? buildPosterUrl(posterPath, "w500") : null;
   const overview = String(enriched?.meta?.overview || "").trim();
-  const existingItemProviders = Array.from(
-    itemEl.querySelectorAll(".provider-pill:not(.tmdb-curator-badge)")
-  ).map((el) => (el.textContent || "").trim());
-  const curatorBadges = includeProviderBadges
-    ? getMatchedCuratorProviderBadges(enriched, existingItemProviders)
+  const tmdbBadges = includeProviderBadges ? getMatchedCuratorProviderBadges(enriched) : [];
+  const allBadges = includeProviderBadges
+    ? collectAndMoveInlineProviderBadges(itemEl, tmdbBadges, true)
     : [];
 
   const infoContainer = itemEl.querySelector(":scope > div:first-child");
@@ -546,9 +607,9 @@ function applyPosterBadgesAndOverviewToListItem(
   }
 
   if (titleRow) {
-    renderProviderBadgeLine(titleRow, curatorBadges, "tmdb-item-badges-line");
+    renderProviderBadgeLine(titleRow, allBadges, "tmdb-item-badges-line");
   } else if (infoContainer) {
-    renderProviderBadgeLine(infoContainer, curatorBadges, "tmdb-item-badges-line", infoContainer.firstElementChild);
+    renderProviderBadgeLine(infoContainer, allBadges, "tmdb-item-badges-line", infoContainer.firstElementChild);
   }
 
   if (posterUrl || overview) {
@@ -770,10 +831,103 @@ window.WatchlistStoreBridge = {
   enrichTitleIfNeeded
 };
 
+
+function syncProviderToggleList() {
+  const fullList = DEFAULT_CURATOR_PROVIDERS.filter((p) => Boolean(p));
+
+  if (Array.isArray(window.PROVIDERS)) {
+    fullList.forEach((provider) => {
+      if (!window.PROVIDERS.includes(provider)) {
+        const sonstIdx = window.PROVIDERS.indexOf("Sonstiges");
+        if (sonstIdx >= 0) {
+          window.PROVIDERS.splice(sonstIdx, 0, provider);
+        } else {
+          window.PROVIDERS.push(provider);
+        }
+      }
+    });
+  } else {
+    window.PROVIDERS = [...fullList];
+  }
+
+  const toggleableProviders = window.PROVIDERS.filter((p) => p && p !== "Sonstiges");
+  const existingNodes = Array.from(
+    document.querySelectorAll("[data-provider], .provider-toggle, .provider-chip, .provider-btn")
+  );
+  const renderedNames = new Set(
+    existingNodes
+      .map((el) => String(el.dataset.provider || el.textContent || "").trim())
+      .filter(Boolean)
+  );
+
+  const missingProviders = toggleableProviders.filter((p) => !renderedNames.has(p));
+  if (missingProviders.length === 0) return;
+
+  const container =
+    document.getElementById("providerToggles") ||
+    document.getElementById("providersContainer") ||
+    existingNodes[0]?.parentElement ||
+    null;
+
+  if (!container) return;
+
+  const activeSet = new Set(getActiveCuratorProviders());
+
+  missingProviders.forEach((providerName) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "provider-toggle tmdb-synced-provider-btn";
+    btn.dataset.provider = providerName;
+    btn.textContent = providerName;
+
+    const isActive = activeSet.has(providerName);
+    btn.setAttribute("aria-pressed", String(isActive));
+    if (isActive) {
+      btn.classList.add("active", "is-active", "selected");
+    }
+
+    btn.addEventListener("click", () => {
+      const currentActive = new Set(getActiveCuratorProviders());
+      if (currentActive.has(providerName)) {
+        if (currentActive.size > 1) {
+          currentActive.delete(providerName);
+        }
+      } else {
+        currentActive.add(providerName);
+      }
+
+      const nextList = toggleableProviders.filter((p) => currentActive.has(p));
+      window.enabledProviders = nextList;
+      try {
+        localStorage.setItem(ACTIVE_PROVIDERS_STORAGE_KEY, JSON.stringify(nextList));
+      } catch {
+        // Ignorieren
+      }
+
+      const nowActive = nextList.includes(providerName);
+      btn.setAttribute("aria-pressed", String(nowActive));
+      btn.classList.toggle("active", nowActive);
+      btn.classList.toggle("is-active", nowActive);
+      btn.classList.toggle("selected", nowActive);
+
+      if (typeof window.renderList === "function") window.renderList();
+      if (typeof window.renderSeenList === "function") window.renderSeenList();
+      if (typeof window.renderRecommendations === "function") {
+        enrichRecommendationContainer();
+      }
+      logInfo(`Anbieter „${providerName}“ ${nowActive ? "aktiviert" : "deaktiviert"}.`);
+    });
+
+    container.append(btn);
+  });
+}
+
 function initBridge() {
+  syncProviderToggleList();
   bindTmdbKeyControls();
   initStore().catch(() => {});
   setTimeout(() => {
+    syncProviderToggleList();
     hookRenderingFunctions();
     enrichRecommendationContainer();
     enrichWatchlistContainer();
