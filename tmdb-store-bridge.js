@@ -31,6 +31,27 @@ const DEFAULT_CURATOR_PROVIDERS = [
   "HBO Max",
   "Apple TV",
   "Rakuten TV",
+  "Prime Video (mit Werbung)",
+  "MagentaTV+",
+  "RTL+",
+  "Joyn+",
+  "Discovery+",
+  "JustWatch TV Free",
+  "JustWatch TV+",
+  "YouTube Premium",
+  "YouTube Free",
+  "Prime Video Free",
+  "ARD Plus",
+  "Arte",
+  "Plex",
+  "Pluto TV",
+  "ServusTV On",
+  "TELE 5",
+  "wedoTV",
+  "KiKA",
+  "funk",
+  "TOGGO",
+  "Kixi",
   "Sonstiges"
 ];
 
@@ -40,23 +61,51 @@ const TMDB_TO_CURATOR_PROVIDER_MAP = {
   "youtube": "YouTube",
   "youtube movies": "YouTube",
   "youtube tv": "YouTube",
+  "youtube premium": "YouTube Premium",
+  "youtube free": "YouTube Free",
   "sky go": "Sky",
   "sky show": "Sky",
   "wow": "Sky",
   "ard mediathek": "ARD",
   "das erste": "ARD",
+  "ard plus": "ARD Plus",
   "zdf": "ZDF",
   "zdf mediathek": "ZDF",
   "3sat": "3 Sat",
   "tresat": "3 Sat",
   "joyn": "Joyn",
-  "joyn plus+": "Joyn",
+  "joyn plus+": "Joyn+",
+  "joyn plus": "Joyn+",
   "disney plus": "Disney+",
   "disney+": "Disney+",
   "paramount plus": "Paramount+",
   "paramount+": "Paramount+",
   "magentatv": "MagentaTV",
   "magenta tv": "MagentaTV",
+  "magenta tv+": "MagentaTV+",
+  "magentatv+": "MagentaTV+",
+  "rtl+": "RTL+",
+  "rtl plus": "RTL+",
+  "discovery+": "Discovery+",
+  "discovery plus": "Discovery+",
+  "justwatch tv free": "JustWatch TV Free",
+  "justwatch tv plus": "JustWatch TV+",
+  "justwatch tv+": "JustWatch TV+",
+  "amazon prime video free with ads": "Prime Video Free",
+  "prime video free": "Prime Video Free",
+  "amazon prime video with ads": "Prime Video (mit Werbung)",
+  "prime video (mit werbung)": "Prime Video (mit Werbung)",
+  "arte": "Arte",
+  "plex": "Plex",
+  "pluto tv": "Pluto TV",
+  "servustv on": "ServusTV On",
+  "tele 5": "TELE 5",
+  "wedo tv": "wedoTV",
+  "wedotv": "wedoTV",
+  "kika": "KiKA",
+  "funk": "funk",
+  "toggo": "TOGGO",
+  "kixi": "Kixi",
   "netzkino": "Netzkino",
   "amazon prime video": "Prime Video",
   "prime video": "Prime Video",
@@ -625,7 +674,6 @@ function moveWatchlistActionsBelowOverview(itemEl) {
   actionsEl.style.paddingTop = "10px";
   actionsEl.style.borderTop = "1px solid rgba(148, 163, 184, 0.14)";
 
-  // Ganz ans Ende des .item-Containers (unter die Inhaltsbeschreibung) verschieben
   itemEl.append(actionsEl);
 }
 
@@ -879,7 +927,6 @@ window.WatchlistStoreBridge = {
   enrichTitleIfNeeded
 };
 
-
 function renameTresatInDom(rootEl) {
   const scope = rootEl || document.body;
   if (!scope) return;
@@ -894,7 +941,6 @@ function renameTresatInDom(rootEl) {
 }
 
 function syncProviderToggleList() {
-  // Entferne eventuell früher erzeugte Bridge-Karten, damit app.js in #providerToggleGrid sauber und ohne Dubletten rendert
   document.querySelectorAll(".tmdb-synced-provider-card, .tmdb-synced-provider-btn").forEach((el) => el.remove());
 
   if (Array.isArray(window.PROVIDERS)) {
