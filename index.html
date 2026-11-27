@@ -23,6 +23,9 @@
   <script src="./recommendation-count-fix.js?v=dev" defer></script>
   <script src="./app.js?v=dev" defer></script>
   <script src="./recommendation-rating.js?v=dev" defer></script>
+  <script type="module" src="./tmdb.js?v=dev"></script>
+  <script type="module" src="./store.js?v=dev"></script>
+  <script type="module" src="./tmdb-store-bridge.js?v=dev"></script>
 </head>
 <body>
   <header>
@@ -160,6 +163,19 @@
           </div>
         </div>
         <div id="keyHint" class="status-msg">Der API-Key wird ausschließlich im lokalen Speicher (localStorage) deines Browsers abgelegt.</div>
+      </section>
+
+      <section class="card" id="tmdbConfigCard">
+        <h2>TMDB API-Key (Poster, Metadaten &amp; DE-Anbieter)</h2>
+        <div class="meta">Wird für Film-/Serien-Metadaten, Poster und Streaming-Verfügbarkeiten in Deutschland (DE) genutzt.</div>
+        <div class="row two" style="margin-top: 10px;">
+          <input id="tmdbApiKeyInput" type="password" placeholder="TMDB API-Schlüssel (lokal gespeichert)" autocomplete="off" />
+          <div class="actions">
+            <button id="saveTmdbKeyBtn" type="button">TMDB-Key speichern</button>
+            <button id="clearTmdbKeyBtn" type="button" class="secondary">TMDB-Key löschen</button>
+          </div>
+        </div>
+        <div id="tmdbKeyHint" class="status-msg">Kein TMDB-API-Schlüssel gespeichert.</div>
       </section>
 
       <section class="card">
