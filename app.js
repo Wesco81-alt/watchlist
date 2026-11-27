@@ -9,10 +9,14 @@ const DEFAULT_SEEN_MIN_SECONDS = 300;
 const PROVIDERS = [
   "Sky",
   "Netflix",
+  "YouTube",
   "ARD",
   "ZDF",
-  "Tresat",
+  "3 Sat",
   "Joyn",
+  "Disney+",
+  "Paramount+",
+  "MagentaTV",
   "Netzkino",
   "Prime Video",
   "HBO Max",
@@ -20,7 +24,7 @@ const PROVIDERS = [
   "Rakuten TV",
   "Sonstiges"
 ];
-const MEDIATHEK_FREE_PROVIDERS = ["ARD", "ZDF", "Tresat", "Joyn", "Netzkino"];
+const MEDIATHEK_FREE_PROVIDERS = ["ARD", "ZDF", "3 Sat", "Joyn", "Netzkino"];
 const RATINGS = ["Gefällt mir nicht", "Gefällt mir", "Finde ich super"];
 
 const navButtons = Array.from(document.querySelectorAll(".nav-btn"));
@@ -1251,7 +1255,10 @@ if (!Array.isArray(enabledProviders)) {
   enabledProviders = [...PROVIDERS];
   saveEnabledProviders();
 } else {
-  enabledProviders = enabledProviders.filter((p) => PROVIDERS.includes(p));
+  enabledProviders = enabledProviders
+    .map((p) => (p === "Tresat" ? "3 Sat" : p))
+    .filter((p, idx, arr) => PROVIDERS.includes(p) && arr.indexOf(p) === idx);
+  saveEnabledProviders();
 }
 
 renderVersionInfo();
